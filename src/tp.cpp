@@ -13,6 +13,8 @@ int main(int argc, char **argv) {
   int cantidadDeAristas;
   int cantidadDeParticiones;
   int numeroDeParticion = 0;
+  int longitudNombreVariable;
+  int longitudNodo;
 
   int num = 0; // num must start at 0
   char * nombreDelArchivo = argv[1];
@@ -60,6 +62,7 @@ int main(int argc, char **argv) {
       cout << "Cantidad de nodos: " << cantidadDeNodos << endl;
       cout << "Cantidad de aristas: " << cantidadDeAristas << endl;
       cout << "Cantidad de particiones: " << cantidadDeParticiones << endl;
+      longitudNodo = ceil(log10(cantidadDeNodos));
       // Genero las columnas
       // Agrego las columnas por todos cada combinacion de nodo
       double ub[cantidadDeNodos][cantidadDeNodos], lb[cantidadDeNodos][cantidadDeNodos], objfun[cantidadDeNodos][cantidadDeNodos];
@@ -68,7 +71,8 @@ int main(int argc, char **argv) {
         for(int j = 0; j < cantidadDeNodos; j++) {
           ub[i][j] = 1;
           lb[i][j] = 0.0;
-          colnames[i][j] = new char[10];
+          longitudNombreVariable = 2 + 2*longitudNodo;
+          colnames[i][j] = new char[longitudNombreVariable];
           sprintf(colnames[i][j],"x%d_%d", i+1, j+1);
           objfun[i][j] = 0;
           xctype[i][j] = 'B';
@@ -91,7 +95,8 @@ int main(int argc, char **argv) {
       for(int i = 0; i < cantidadDeNodos; i++) {
         ubw[i] = 1;
         lbw[i] = 0.0;
-        colnamesw[i] = new char[10];
+        longitudNombreVariable = 1 + longitudNodo;
+        colnamesw[i] = new char[longitudNombreVariable];
         sprintf(colnamesw[i],"w%d", i+1);
         objfunw[i] = 1;
         xctypew[i] = 'B';
@@ -133,13 +138,18 @@ int main(int argc, char **argv) {
           matind[nzcnt] = i * cantidadDeNodos + j;
           matind[nzcnt + 1] = cantidadDeNodos * cantidadDeNodos + j;
 
-          rownames[j] = new char[10];
+          longitudNombreVariable = 4 + 2*longitudNodo;
+          rownames[j] = new char[longitudNombreVariable];
           sprintf(rownames[j],"wp_%d_%d", i+1, j+1);
 
           nzcnt+=2;
         }
         // Esta rutina agrega la restriccion al lp.
         status = CPXaddrows(env, lp, ccnt, rcnt, nzcnt, rhs, sense, matbeg, matind, matval, NULL, rownames);
+        if (status) {
+            cerr << "Problema agregando las restricciones wp" << endl;
+            exit(1);
+        }
       }
     }
 
@@ -163,7 +173,8 @@ int main(int argc, char **argv) {
       sense[0] = 'E'; // Es por igualdad
       rhs[0] = 1; // El termino independiente es 1
       matbeg[0] = nzcnt; // ASI ESTABA EN EL EJEMPLO, NO ENTIENDO BIEN QUE ES
-      rownames[0] = new char[10];
+      longitudNombreVariable = 2 + longitudNodo;
+      rownames[0] = new char[longitudNombreVariable];
       sprintf(rownames[0],"v_%d", numeroDeParticion);
 
       for(int i = 0; i < cantidadDeNodosEnLaParticion; i++) {
@@ -180,6 +191,10 @@ int main(int argc, char **argv) {
 
       //AGREGAR ACA LAS RESTRICCIONES POR LA PARTICION
       status = CPXaddrows(env, lp, ccnt, rcnt, nzcnt, rhs, sense, matbeg, matind, matval, NULL, rownames);
+      if (status) {
+        cerr << "Problema agregando la restriccion para la particion: " << numeroDeParticion << endl;
+        exit(1);
+      }
 
       delete[] rhs;
       delete[] matbeg;
@@ -226,17 +241,19 @@ int main(int argc, char **argv) {
         matind[nzcnt] = (origen-1) * cantidadDeNodos + i;
         matind[nzcnt + 1] = (destino-1) * cantidadDeNodos + i;
 
-        rownames[i] = new char[10];
+        longitudNombreVariable = 6 + 3*longitudNodo;
+        rownames[i] = new char[longitudNombreVariable];
         sprintf(rownames[i],"col_%d_%d_%d", origen, destino, i+1);
 
         nzcnt+=2;
       }
 
-
-
-
       // Esta rutina agrega la restriccion al lp.
       status = CPXaddrows(env, lp, ccnt, rcnt, nzcnt, rhs, sense, matbeg, matind, matval, NULL, rownames);
+      if (status) {
+        cerr << "Problema agregando las restricciones para la arista (" << origen << "," << destino << ")" << endl;
+        exit(1);
+      }
 
       delete[] rhs;
       delete[] matbeg;
@@ -245,10 +262,6 @@ int main(int argc, char **argv) {
       for(int i = 0; i < rcnt; i++) {
         delete[] rownames[i];
       }
-
-
-      status = CPXwriteprob(env, lp, "tp.lp", NULL);
-
     }
   }
   archivo.close();
@@ -261,181 +274,9 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  return 0; // everything went right.
-  /*
-
-
-  // Datos del nodo
-  int cantidadDeNodos = 5;
-  int cantidadDeAristas = 6;
-  int aristas[6][2] = {
-    {1,5},
-    {2,4},
-    {1,2},
-    {4,5},
-    {3,4},
-    {2,5}
-  };
-
-
-
-
-  // Datos de la instancia de dieta
-  int n = 3;
-  double costo[] = {1.8, 2.3,1.5};
-  double calorias[] = {170,50,300};
-  double calcio[] = {3,400,40};
-  double minCalorias = 2000;
-  double maxCalorias = 2300;
-  double minCalcio = 1200;
-  double maxPan = 3;
-  double minLeche = 2;
-
-  // Genero el problema de cplex.
-  int status;
-  CPXENVptr env; // Puntero al entorno.
-  CPXLPptr lp; // Puntero al LP
-
-  // Creo el entorno.
-  env = CPXopenCPLEX(&status);
-
-
-  if (env == NULL) {
-    cerr << "Error creando el entorno" << endl;
-    exit(1);
-  }
-
-  // Creo el LP.
-  lp = CPXcreateprob(env, &status, "instancia de TP");
-
-
-  if (lp == NULL) {
-    cerr << "Error creando el LP" << endl;
-    exit(1);
-  }
-
-
-  // Agrego las columnas.
-  int cantidadDeVariables = cantidadDeNodos*cantidadDeNodos + cantidadDeNodos;
-  status = CPXnewcols(env, lp, cantidadDeVariables, objfun, lb, ub, NULL, colnames);
-
-  if (status) {
-    cerr << "Problema agregando las variables CPXnewcols" << endl;
-    exit(1);
-  }
-  */
-/*
-  // Definimos las variables. No es obligatorio pasar los nombres de las variables, pero facilita el debug. La info es la siguiente:
-  double *ub, *lb, *objfun; // Cota superior, cota inferior, coeficiente de la funcion objetivo.
-  char *xctype, **colnames; // tipo de la variable (por ahora son siempre continuas), string con el nombre de la variable.
-  ub = new double[n];
-  lb = new double[n];
-  objfun = new double[n];
-  xctype = new char[n];
-  colnames = new char*[n];
-
-  for (int i = 0; i < n; i++) {
-    ub[i] = CPX_INFBOUND;
-    lb[i] = 0.0;
-    objfun[i] = costo[i];
-    xctype[i] = 'C'; // 'C' es continua, 'B' binaria, 'I' Entera. Para LP (no enteros), este parametro tiene que pasarse como NULL. No lo vamos a usar por ahora.
-    colnames[i] = new char[10];
-  }
-
-  // Nombre de la variable x_m
-  sprintf(colnames[0],"x_m");
-
-  // Nombre de la variable x_l y cota inferior
-  lb[1] = 2;
-  sprintf(colnames[1],"x_l");
-
-  // Nombre de la variable x_p y cota superior
-  ub[2] = 3;
-  sprintf(colnames[2],"x_p");
-
-  // Agrego las columnas.
-  status = CPXnewcols(env, lp, n, objfun, lb, ub, NULL, colnames);
-
-  if (status) {
-    cerr << "Problema agregando las variables CPXnewcols" << endl;
-    exit(1);
-  }
-
-  // Libero las estructuras.
-  for (int i = 0; i < n; i++) {
-    delete[] colnames[i];
-  }
-
-  delete[] ub;
-  delete[] lb;
-  delete[] objfun;
-  delete[] xctype;
-  delete[] colnames;
-
-
-  // CPLEX por defecto minimiza. Le cambiamos el sentido a la funcion objetivo si se quiere maximizar.
-  // CPXchgobjsen(env, lp, CPX_MAX);
-
-  // Generamos de a una las restricciones.
-  // Estos valores indican:
-  // ccnt = numero nuevo de columnas en las restricciones.
-  // rcnt = cuantas restricciones se estan agregando.
-  // nzcnt = # de coeficientes != 0 a ser agregados a la matriz. Solo se pasan los valores que no son cero.
-
-  int ccnt = 0, rcnt = 3, nzcnt = 0;
-
-  char sense[] = {'G','L','G'}; // Sentido de la desigualdad. 'G' es mayor o igual y 'E' para igualdad.
-
-  double *rhs = new double[rcnt]; // Termino independiente de las restricciones.
-  int *matbeg = new int[rcnt]; //Posicion en la que comienza cada restriccion en matind y matval.
-  int *matind = new int[3*n]; // Array con los indices de las variables con coeficientes != 0 en la desigualdad.
-  double *matval = new double[3*n]; // Array que en la posicion i tiene coeficiente ( != 0) de la variable cutind[i] en la restriccion.
-
-  // Podria ser que algun coeficiente sea cero. Pero a los sumo vamos a tener 3*n coeficientes. CPLEX va a leer hasta la cantidad
-  // nzcnt que le pasemos.
-
-
-  //Restriccion de minimas calorias
-  matbeg[0] = nzcnt;
-  rhs[0] = minCalorias;
-  for (int i = 0; i < n; i++) {
-     matind[nzcnt] = i;
-     matval[nzcnt] = calorias[i];
-     nzcnt++;
-  }
-
-  //Restriccion de maximas calorias
-  matbeg[1] = nzcnt;
-  rhs[1] = maxCalorias;
-  for (int i = 0; i < n; i++) {
-     matind[nzcnt] = i;
-     matval[nzcnt] = calorias[i];
-     nzcnt++;
-  }
-
-  //Restriccion de minimo calcio
-  matbeg[2] = nzcnt;
-  rhs[2] = minCalcio;
-  for (int i = 0; i < n; i++) {
-     matind[nzcnt] = i;
-     matval[nzcnt] = calcio[i];
-     nzcnt++;
-  }
-
-  // Esta rutina agrega la restriccion al lp.
-  status = CPXaddrows(env, lp, ccnt, rcnt, nzcnt, rhs, sense, matbeg, matind, matval, NULL, NULL);
-
-  if (status) {
-    cerr << "Problema agregando restricciones." << endl;
-    exit(1);
-  }
-
-  delete[] rhs;
-  delete[] matbeg;
-  delete[] matind;
-  delete[] matval;
-
+  // Resolvemos usando CPLEX pero branch and bound
   // Seteo de algunos parametros.
+/*
   // Para desactivar la salida poern CPX_OFF.
   status = CPXsetintparam(env, CPX_PARAM_SCRIND, CPX_ON);
 
@@ -443,7 +284,7 @@ int main(int argc, char **argv) {
     cerr << "Problema seteando SCRIND" << endl;
     exit(1);
   }
-
+*/
   // Por ahora no va a ser necesario, pero mas adelante si. Setea el tiempo
   // limite de ejecucion.
   status = CPXsetdblparam(env, CPX_PARAM_TILIM, 3600);
@@ -453,13 +294,33 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  // Escribimos el problema a un archivo .lp.
-  status = CPXwriteprob(env, lp, "dieta2.lp", NULL);
-
+  //Para que haga Branch & Bound:
+  status = CPXsetintparam(env, CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL);
   if (status) {
-    cerr << "Problema escribiendo modelo" << endl;
+    cerr << "Problema seteando el parametro CPX_PARAM_MIPSEARCH en CPX_MIPSEARCH_TRADITIONAL" << endl;
     exit(1);
   }
+
+  //Para facilitar la comparación evitamos paralelismo:
+  status = CPXsetintparam(env, CPX_PARAM_THREADS, 1);
+  if (status) {
+    cerr << "Problema seteando el parametro CPX_PARAM_THREADS en 1" << endl;
+    exit(1);
+  }
+
+  //Para que no se adicionen planos de corte:
+  status = CPXsetintparam(env,CPX_PARAM_EACHCUTLIM, 0);
+  if (status) {
+    cerr << "Problema seteando el parametro CPX_PARAM_EACHCUTLIM en 0" << endl;
+    exit(1);
+  }
+
+  status = CPXsetintparam(env, CPX_PARAM_FRACCUTS, -1);
+  if (status) {
+    cerr << "Problema seteando el parametro CPX_PARAM_FRACCUTS en -1" << endl;
+    exit(1);
+  }
+
 
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   double inittime, endtime;
@@ -484,7 +345,8 @@ int main(int argc, char **argv) {
   string statstr(statstring);
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
   if(solstat!=CPX_STAT_OPTIMAL){
-     exit(1);
+    cerr << "La solucion no fue optima." << endl;
+    exit(1);
   }
 
   double objval;
@@ -498,13 +360,14 @@ int main(int argc, char **argv) {
   cout << "Datos de la resolucion: " << "\t" << objval << "\t" << (endtime - inittime) << endl;
 
   // Tomamos los valores de la solucion y los escribimos a un archivo.
-  std::string outputfile = "dieta.sol";
+  std::string outputfile = "tp.sol";
   ofstream solfile(outputfile.c_str());
 
 
   // Tomamos los valores de todas las variables. Estan numeradas de 0 a n-1.
-  double *sol = new double[n];
-  status = CPXgetx(env, lp, sol, 0, n - 1);
+  int cantidadDeVariables = cantidadDeNodos * (cantidadDeNodos + 1);
+  double *sol = new double[cantidadDeVariables];
+  status = CPXgetx(env, lp, sol, 0, cantidadDeVariables - 1);
 
   if (status) {
     cerr << "Problema obteniendo la solucion del LP." << endl;
@@ -513,8 +376,10 @@ int main(int argc, char **argv) {
 
 
   // Solo escribimos las variables distintas de cero (tolerancia, 1E-05).
+  solfile << "Tiempo de corrida: " << endtime - inittime << endl;
+  solfile << "Valor de la funcion objetivo: " << objval << endl;
   solfile << "Status de la solucion: " << statstr << endl;
-  for (int i = 0; i < n; i++) {
+  for (int i = 0; i < cantidadDeVariables; i++) {
     if (sol[i] > TOL) {
       solfile << "x_" << i << " = " << sol[i] << endl;
     }
@@ -524,6 +389,5 @@ int main(int argc, char **argv) {
   delete [] sol;
   solfile.close();
 
-*/
   return 0;
 }
