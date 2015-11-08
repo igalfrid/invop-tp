@@ -285,7 +285,7 @@ void generarLP(CPXENVptr env, CPXLPptr lp, int* cantidadDeNodosDelProblema, char
 
 void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
   int status;
-  /* ESTE FALLA PARA LP MIXTOS
+
   // Para desactivar la salida poern CPX_OFF.
   status = CPXsetintparam(env, CPX_PARAM_SCRIND, CPX_ON);
 
@@ -293,7 +293,6 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
     cerr << "Problema seteando SCRIND" << endl;
     exit(1);
   }
-*/
   // Por ahora no va a ser necesario, pero mas adelante si. Setea el tiempo
   // limite de ejecucion.
   status = CPXsetdblparam(env, CPX_PARAM_TILIM, 3600);
@@ -420,6 +419,10 @@ int main(int argc, char **argv) {
 
   setearParametrosDeCPLEXParaBranchAndBoundPuro(env);
 
+  if (status) {
+    cerr << "Problema seteando CPX_PARAM_SCRIND" << endl;
+    exit(1);
+  }
   double tiempoDeCorrida = resolverLP(env, lp);
 
   generarResultados(env, lp, cantidadDeNodos, tiempoDeCorrida);
