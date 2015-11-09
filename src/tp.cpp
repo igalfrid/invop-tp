@@ -374,7 +374,9 @@ void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos, double t
     exit(1);
   }
 
-  int storespace=10000;
+  int longitudNodo = ceil(log10(cantidadDeNodos));
+  int longitudNombreVariable = 6 + 3*longitudNodo;
+  int storespace=cantidadDeVariables * longitudNombreVariable;
   char * namestore = new char[storespace];
   char ** names = new char* [cantidadDeVariables];
   int sp;
