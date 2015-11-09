@@ -214,22 +214,6 @@ void generarLP(CPXENVptr env, CPXLPptr lp, int* cantidadDeNodosDelProblema, char
     exit(1);
   }
 
-  // Creo el entorno.
-  env = CPXopenCPLEX(&status);
-
-  if (env == NULL) {
-    cerr << "Error creando el entorno" << endl;
-    exit(1);
-  }
-
-  // Creo el LP.
-  lp = CPXcreateprob(env, &status, nombreDelArchivo);
-
-  if (lp == NULL) {
-    cerr << "Error creando el LP" << endl;
-    exit(1);
-  }
-
   string tipoDeLinea, descarte;
   int origen, destino;
 
@@ -339,12 +323,17 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   status = CPXgettime(env, &inittime);
 
   // Optimizamos el problema.
-  status = CPXlpopt(env, lp);
+  status = CPXmipopt(env, lp);
+
+  if (status) {
+    cerr << "Problema optimizando CPLEX, status: " << status << endl;
+    exit(1);
+  }
 
   status = CPXgettime(env, &endtime);
 
   if (status) {
-    cerr << "Problema optimizando CPLEX" << endl;
+    cerr << "Problema obteniendo el tiempo luego de terminar el lp" << endl;
     exit(1);
   }
 
@@ -356,11 +345,6 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   p = CPXgetstatstring(env, solstat, statstring);
   string statstr(statstring);
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
-  if(solstat!=CPX_STAT_OPTIMAL){
-    cerr << "La solucion no fue optima." << endl;
-    exit(1);
-  }
-
   return endtime - inittime;
 }
 
@@ -390,16 +374,28 @@ void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos, double t
     exit(1);
   }
 
+  int storespace=10000;
+  char * namestore = new char[storespace];
+  char ** names = new char* [cantidadDeVariables];
+  int sp;
+  status = CPXgetcolname(env, lp, names, namestore, storespace, &sp, 0, cantidadDeVariables - 1);
+
+  if (status) {
+    cerr << "Problema obteniendo la solucion del LP." << endl;
+    exit(1);
+  }
 
   // Solo escribimos las variables distintas de cero (tolerancia, 1E-05).
   solfile << "Tiempo de corrida: " << tiempoDeCorrida << endl;
   solfile << "Valor de la funcion objetivo: " << objval << endl;
   for (int i = 0; i < cantidadDeVariables; i++) {
     if (sol[i] > TOL) {
-      solfile << "x_" << i << " = " << sol[i] << endl;
+      solfile << names[i] << " = " << sol[i] << endl;
     }
   }
 
+  delete []names;
+  delete []namestore;
 
   delete [] sol;
   solfile.close();
@@ -415,14 +411,26 @@ int main(int argc, char **argv) {
   CPXENVptr env; // Puntero al entorno.
   CPXLPptr lp; // Puntero al LP
 
-  generarLP(env, lp, &cantidadDeNodos, nombreDelArchivo);
+  // Creo el entorno.
+  env = CPXopenCPLEX(&status);
+
+  if (env == NULL) {
+    cerr << "Error creando el entorno" << endl;
+    exit(1);
+  }
+
+  // Creo el LP.
+  lp = CPXcreateprob(env, &status, nombreDelArchivo);
+
+  if (lp == NULL) {
+    cerr << "Error creando el LP" << endl;
+    exit(1);
+  }
 
   setearParametrosDeCPLEXParaBranchAndBoundPuro(env);
 
-  if (status) {
-    cerr << "Problema seteando CPX_PARAM_SCRIND" << endl;
-    exit(1);
-  }
+  generarLP(env, lp, &cantidadDeNodos, nombreDelArchivo);
+
   double tiempoDeCorrida = resolverLP(env, lp);
 
   generarResultados(env, lp, cantidadDeNodos, tiempoDeCorrida);
