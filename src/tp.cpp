@@ -244,7 +244,7 @@ void generarLP(CPXENVptr env, CPXLPptr lp, int* cantidadDeNodosDelProblema, char
       generarRestriccionPorParticion(env, lp, archivo, cantidadDeNodos, cantidadDeNodosEnLaParticion, numeroDeParticion);
     }
 
-    else if(tipoDeLinea == "e" && cantidadDeAristas > 0) {
+    else if(tipoDeLinea == "e") {
       // Es una arista
       cantidadDeAristas--;
       archivo >> origen;
