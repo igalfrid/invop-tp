@@ -21,7 +21,7 @@ void generarVariablesParaCombinacionesDeLosNodos(CPXENVptr env, CPXLPptr lp, int
       colnames[i][j] = new char[longitudNombreVariable];
       sprintf(colnames[i][j],"x%d_%d", i+1, j+1);
       objfun[i][j] = 0;
-      xctype[i][j] = 'B';
+      xctype[i][j] = 'C';
     }
     status = CPXnewcols(env, lp, cantidadDeNodos, objfun[i], lb[i], ub[i], xctype[i], colnames[i]);
     if (status) {
@@ -48,7 +48,7 @@ void generarVariablesParaCadaColor(CPXENVptr env, CPXLPptr lp, int cantidadDeNod
     colnamesw[i] = new char[longitudNombreVariable];
     sprintf(colnamesw[i],"w%d", i+1);
     objfunw[i] = 1;
-    xctypew[i] = 'B';
+    xctypew[i] = 'C';
   }
   status = CPXnewcols(env, lp, cantidadDeNodos, objfunw, lbw, ubw, xctypew, colnamesw);
   if (status) {
@@ -240,7 +240,7 @@ void generarLP(CPXENVptr env, CPXLPptr lp, Grafo grafo) {
   }
 }
 
-void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
+void setearParametrosParaCplex(CPXENVptr env) {
   int status;
 
   // Para desactivar la salida poern CPX_OFF.
@@ -258,9 +258,11 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
     cerr << "Problema seteando el tiempo limite" << endl;
     exit(1);
   }
+}
 
+void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
   //Para que haga Branch & Bound:
-  status = CPXsetintparam(env, CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL);
+  int status = CPXsetintparam(env, CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL);
   if (status) {
     cerr << "Problema seteando el parametro CPX_PARAM_MIPSEARCH en CPX_MIPSEARCH_TRADITIONAL" << endl;
     exit(1);
@@ -295,8 +297,10 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   status = CPXgettime(env, &inittime);
 
+cout << "antes de optimizar" << endl;
   // Optimizamos el problema.
   status = CPXmipopt(env, lp);
+  cout << "despues de optimizar" << endl;
 
   if (status) {
     cerr << "Problema optimizando CPLEX, status: " << status << endl;
@@ -463,6 +467,8 @@ int main(int argc, char **argv) {
     cerr << "Error creando el LP" << endl;
     exit(1);
   }
+
+  setearParametrosParaCplex(env);
   setearParametrosDeCPLEXParaBranchAndBoundPuro(env);
 
   // Ahora si generamos el LP a partir del grafo
