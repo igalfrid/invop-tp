@@ -1,0 +1,6 @@
+*.lp
+*~
+*.sol
+*.log
+*.o
+prog
