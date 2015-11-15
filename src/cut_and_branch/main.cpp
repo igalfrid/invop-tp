@@ -21,7 +21,7 @@ void generarVariablesParaCombinacionesDeLosNodos(CPXENVptr env, CPXLPptr lp, int
       colnames[i][j] = new char[longitudNombreVariable];
       sprintf(colnames[i][j],"x%d_%d", i+1, j+1);
       objfun[i][j] = 0;
-      xctype[i][j] = 'C';
+      xctype[i][j] = 'B';
     }
     status = CPXnewcols(env, lp, cantidadDeNodos, objfun[i], lb[i], ub[i], xctype[i], colnames[i]);
     if (status) {
@@ -48,7 +48,7 @@ void generarVariablesParaCadaColor(CPXENVptr env, CPXLPptr lp, int cantidadDeNod
     colnamesw[i] = new char[longitudNombreVariable];
     sprintf(colnamesw[i],"w%d", i+1);
     objfunw[i] = 1;
-    xctypew[i] = 'C';
+    xctypew[i] = 'B';
   }
   status = CPXnewcols(env, lp, cantidadDeNodos, objfunw, lbw, ubw, xctypew, colnamesw);
   if (status) {
@@ -231,9 +231,6 @@ void generarLP(CPXENVptr env, CPXLPptr lp, Grafo grafo) {
     numeroDeParticion++;
   }
 
-   // Escribimos el problema a un archivo .lp.
-  status = CPXwriteprob(env, lp, "modelo.lp", NULL);
-
   if (status) {
     cerr << "Problema escribiendo modelo" << endl;
     exit(1);
@@ -297,10 +294,8 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   status = CPXgettime(env, &inittime);
 
-cout << "antes de optimizar" << endl;
   // Optimizamos el problema.
   status = CPXmipopt(env, lp);
-  cout << "despues de optimizar" << endl;
 
   if (status) {
     cerr << "Problema optimizando CPLEX, status: " << status << endl;
@@ -339,9 +334,8 @@ void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos, double t
   // Tomamos los valores de la solucion y los escribimos a un archivo.
   ofstream solfile(nombreDelArchivoDeSalida);
 
-
   // Tomamos los valores de todas las variables. Estan numeradas de 0 a n-1.
-  int cantidadDeVariables = cantidadDeNodos * (cantidadDeNodos + 1);
+  int cantidadDeVariables = CPXgetnumcols(env, lp);
   double *sol = new double[cantidadDeVariables];
   status = CPXgetx(env, lp, sol, 0, cantidadDeVariables - 1);
 
@@ -440,10 +434,189 @@ Grafo leerArchivoDeEntrada(char* nombreDelArchivo) {
   return grafo;
 }
 
+void convertirVariablesLP(CPXENVptr env, CPXLPptr lp, char type) {
+  int cantidadDeVariables = CPXgetnumcols(env, lp);
+  int * indices = new int[cantidadDeVariables];
+  char * types = new char[cantidadDeVariables];
+
+  for(int i = 0; i < cantidadDeVariables; i++) {
+    indices[i] = i;
+    types[i] = type;
+  }
+
+  int status = CPXchgctype (env, lp, cantidadDeVariables, indices, types);
+
+  delete []indices;
+  delete []types;
+
+  if(status) {
+    cerr << "Error cambiando los tipos de las variables del problema" << endl;
+    exit(1);
+  }
+}
+
+void relajarLP(CPXENVptr env, CPXLPptr lp) {
+  convertirVariablesLP(env, lp, CPX_CONTINUOUS);
+}
+
+void desRelajarLP(CPXENVptr env, CPXLPptr lp) {
+  convertirVariablesLP(env, lp, CPX_BINARY);
+}
+
+/**
+* Ordena los valores de forma descendiente y los indices los alinea a las posiciones de los valores.
+* Utilizo selection sort.
+*/
+void ordenarDescendientemente(double * valores, pair<int, int> * indices, int cantidad) {
+  double valorMaximo;
+  int indiceMaximo;
+  for(int i=0; i<cantidad; i++) {
+    indiceMaximo = 0;
+    valorMaximo = 0;
+    for(int j=0; j<cantidad; j++) {
+      if(valores[j] > valorMaximo) {
+        valorMaximo = valores[j];
+        indiceMaximo = j;
+      }
+    }
+    swap(valores[i], valores[indiceMaximo]);
+    swap(indices[i], indices[indiceMaximo]);
+  }
+}
+
+/**
+* Agrega una restriccion al lp por la suma de los nodos de color j menor o igual al wj
+*/
+void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colorJ, int cantidadDeNodos, char* nombreDesigualdad) {
+  // Estos valores indican:
+  // ccnt = numero nuevo de columnas en las restricciones.
+  // rcnt = cuantas restricciones se estan agregando.
+  // nzcnt = # de coeficientes != 0 a ser agregados a la matriz. Solo se pasan los valores que no son cero.
+
+  int columnasAAgregar = 0;
+  int restriccionesAAgregar = 1;
+  int coeficientesDistintosDe0 = nodos.size() + 1;
+
+  char *sense = new char[restriccionesAAgregar]; // Sentido de la desigualdad. 'G' es mayor o igual y 'E' para igualdad.
+  double *rhs = new double[restriccionesAAgregar]; // Termino independiente de las restricciones.
+  int *matbeg = new int[restriccionesAAgregar]; //Posicion en la que comienza cada restriccion en matind y matval.
+  int *matind = new int[restriccionesAAgregar * coeficientesDistintosDe0 + 1]; // Array con los indices de las variables con coeficientes != 0 en la desigualdad.
+  double *matval = new double[restriccionesAAgregar * coeficientesDistintosDe0 + 1]; // Array que en la posicion i tiene coeficiente ( != 0) de la variable cutind[i] en la restriccion.
+  char *rownames[restriccionesAAgregar];
+
+  sense[0] = 'L'; // Son por menor o igual
+  rhs[0] = 0.0; // El termino independiente siempre es 0
+  rownames[0] = nombreDesigualdad;
+  matbeg[0] = 0; // ASI ESTABA EN EL EJEMPLO, NO ENTIENDO BIEN QUE ES
+
+  int i=0;
+  list<int>::iterator it;
+  for (it=nodos.begin(); it!=nodos.end(); ++it) {
+    // El nodo i con el color j es sol[i*cantidadDeNodos + j]
+    matind[i] = (*it - 1) * cantidadDeNodos + (colorJ - 1); // El menos 1 es porque los nodos arrancan de 1 y las variables de 0
+    matval[i] = 1; // El valor de cada coeficiente de x es 1
+    i++;
+  }
+  // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
+  matind[i] = cantidadDeNodos * cantidadDeNodos + (colorJ - 1);
+  matval[i] = -1; // El valor del coeficiente de wj es -1
+
+  // Esta rutina agrega la restriccion al lp.
+  int status = CPXaddrows(env, lp, columnasAAgregar, restriccionesAAgregar, coeficientesDistintosDe0, rhs, sense, matbeg, matind, matval, NULL, rownames);
+  if (status) {
+    cerr << "Problema agregando restriccion por desigualdad clique" << endl;
+    exit(1);
+  }
+
+  delete[] sense;
+  delete[] rhs;
+  delete[] matbeg;
+  delete[] matind;
+  delete[] matval;
+  delete[] rownames[0];
+}
+
+/**
+* Dada la solucion para un color ordenada descendentemente busca una clique
+* cuya desigualdad sea violada por la solucion y se agrega la restriccion
+* correspondiente al LP
+*/
+int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXLPptr lp, double * valorVariablePorColor, pair<int, int> * indices, double valorWj, Grafo grafo, int numeroDeDesigualdadClique){
+  int cantidadDeNodos = grafo.getCantidadDeNodos();
+  int colorJ = indices[0].second;
+  list<int> clique;
+  clique.push_back(indices[0].first);
+  double sumaDeLaClique = valorVariablePorColor[0];
+  for(int i=1; i<cantidadDeNodos; i++) {
+    int nodo = indices[i].first;
+    if(grafo.esAdyacenteATodos(clique, nodo)) {
+      clique.push_back(nodo);
+      sumaDeLaClique += valorVariablePorColor[i];
+    }
+  }
+  if(sumaDeLaClique > valorWj) {
+    // La desigualdad de esta clique viola a la solucion actual
+    // Genero nueva restriccion
+    int longitudNombreDeDesigualdad = 2 + ceil(log10(numeroDeDesigualdadClique));
+    char* nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
+    sprintf(nombreDeLaDesigualdad,"k_%d", numeroDeDesigualdadClique);
+    agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos, nombreDeLaDesigualdad);
+    numeroDeDesigualdadClique++;
+  }
+  return numeroDeDesigualdadClique;
+}
+
+int agregarPlanosDeCortePorDesigualdadClique(CPXENVptr env, CPXLPptr lp, double* solucion, Grafo grafo, int numeroDeDesigualdadClique) {
+  int cantidadDeNodos = grafo.getCantidadDeNodos();
+  double * valorVariablePorColor = new double[cantidadDeNodos];
+  pair<int, int> * indices = new pair<int, int>[cantidadDeNodos];
+  for(int j = 0; j < cantidadDeNodos; j++) {
+    // Para cada color buscamos una clique maximal y agregamos la restriccion
+    // El nodo i con el color j es sol[i*cantidadDeNodos + j]
+    // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
+    for(int i = 0; i < cantidadDeNodos; i++) {
+      valorVariablePorColor[i] = solucion[i * cantidadDeNodos + j];
+      indices[i] = make_pair(i+1, j+1);
+    }
+    double valorWj = solucion[cantidadDeNodos*cantidadDeNodos + j];
+    ordenarDescendientemente(valorVariablePorColor, indices, cantidadDeNodos);
+    numeroDeDesigualdadClique = buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(env, lp, valorVariablePorColor, indices, valorWj, grafo, numeroDeDesigualdadClique);
+  }
+  delete [] valorVariablePorColor;
+  delete [] indices;
+  return numeroDeDesigualdadClique;
+}
+
+void agregarPlanosDeCortePorDesigualdadAgujeroImpar(CPXENVptr env, CPXLPptr lp, double* solucion, Grafo grafo) {
+
+}
+
+void agregarPlanosDeCorte(CPXENVptr env, CPXLPptr lp, Grafo grafo, int iteracionesPlanosDeCorte) {
+  int cantidadDeNodos = grafo.getCantidadDeNodos();
+  int cantidadDeVariables = CPXgetnumcols(env, lp);
+  double *solucion = new double[cantidadDeVariables];
+  char *archivoResultado = new char[26 + 2];
+  int numeroDeDesigualdadClique = 1;
+  for(int i = 0; i < iteracionesPlanosDeCorte; i++) {
+    resolverLP(env, lp);
+    CPXgetx(env, lp, solucion, 0, cantidadDeVariables - 1);
+    sprintf(archivoResultado,"resultados_temporales_%d.col", i);
+    generarResultados(env, lp, cantidadDeNodos, 10.0, archivoResultado);
+    numeroDeDesigualdadClique = agregarPlanosDeCortePorDesigualdadClique(env, lp, solucion, grafo, numeroDeDesigualdadClique);
+    agregarPlanosDeCortePorDesigualdadAgujeroImpar(env, lp, solucion, grafo);
+  }
+  delete[] solucion;
+}
+
 int main(int argc, char **argv) {
   // Leemos el archivo y obtenemos el grafo
   char * nombreDelArchivoDeEntrada = argv[1];
   char * nombreDelArchivoDeSalida = argv[2];
+  int iteracionesPlanosDeCorte = 3; //Por default hace 3 iteraciones
+  if(argv[3] != NULL) {
+    iteracionesPlanosDeCorte = atoi(argv[3]);
+  }
+  cout << "Se utilizan " << iteracionesPlanosDeCorte << " iteraciones de planos de corte" << endl;
   Grafo grafo = leerArchivoDeEntrada(nombreDelArchivoDeEntrada);
   cout << "El grafo tiene " << grafo.getCantidadDeNodos() << " nodos" << endl;
   cout << "El grafo tiene " << grafo.getCantidadDeAristas() << " aristas" << endl;
@@ -474,7 +647,29 @@ int main(int argc, char **argv) {
   // Ahora si generamos el LP a partir del grafo
   generarLP(env, lp, grafo);
 
+  double inittime, endtime;
+
+  // Tomamos el tiempo de resolucion utilizando CPXgettime.
+  status = CPXgettime(env, &inittime);
+
+  // Relajo el LP
+  relajarLP(env, lp);
+
+  // Agregamos los planos de corte
+  agregarPlanosDeCorte(env, lp, grafo, iteracionesPlanosDeCorte);
+
+  // Quito la relajacion
+  desRelajarLP(env, lp);
+
+  // Escribimos el LP
+  CPXwriteprob(env, lp, "modelo.lp", NULL);
+
   double tiempoDeCorrida = resolverLP(env, lp);
+
+  // Tomamos el tiempo de resolucion utilizando CPXgettime.
+  status = CPXgettime(env, &endtime);
+
+  cout << "El tiempo total de corrida fue: " << endtime - inittime << endl;
 
   generarResultados(env, lp, grafo.getCantidadDeNodos(), tiempoDeCorrida, nombreDelArchivoDeSalida);
 
