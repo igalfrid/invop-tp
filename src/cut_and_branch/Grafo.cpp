@@ -80,3 +80,13 @@ list<Arista> Grafo::getAristas() {
 list<Particion> Grafo::getParticiones() {
   return this->particiones;
 }
+
+bool Grafo::esAdyacenteATodos(list<int> nodos, int nodo) {
+  list<int>::iterator it;
+  for (it=nodos.begin(); it!=nodos.end(); ++it) {
+    if(!this->sonAdyacentes(nodo, *it)) {
+      return false;
+    }
+  }
+  return true;
+}

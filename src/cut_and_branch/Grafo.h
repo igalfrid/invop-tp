@@ -22,6 +22,7 @@ class Grafo {
         bool sonAdyacentes(int p, int q);
         list<Arista> getAristas();
         list<Particion> getParticiones();
+        bool esAdyacenteATodos(list<int> nodos, int nodo);
 };
 
 
