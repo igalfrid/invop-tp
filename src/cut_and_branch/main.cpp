@@ -544,25 +544,37 @@ void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colo
 int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXLPptr lp, double * valorVariablePorColor, pair<int, int> * indices, double valorWj, Grafo grafo, int numeroDeDesigualdadClique){
   int cantidadDeNodos = grafo.getCantidadDeNodos();
   int colorJ = indices[0].second;
+  int nodo;
   list<int> clique;
-  clique.push_back(indices[0].first);
-  double sumaDeLaClique = valorVariablePorColor[0];
-  for(int i=1; i<cantidadDeNodos; i++) {
-    int nodo = indices[i].first;
-    if(grafo.esAdyacenteATodos(clique, nodo)) {
-      clique.push_back(nodo);
-      sumaDeLaClique += valorVariablePorColor[i];
+  int indicePrimerNodoNoUsado = 0;
+  bool encontreCliqueNueva = false;
+  while(indicePrimerNodoNoUsado < cantidadDeNodos && !encontreCliqueNueva) {
+    clique.clear();
+
+    clique.push_back(indices[indicePrimerNodoNoUsado].first);
+    double sumaDeLaClique = valorVariablePorColor[0];
+    for(int i=1; i<cantidadDeNodos; i++) {
+      nodo = indices[i].first;
+      if(grafo.esAdyacenteATodos(clique, nodo)) {
+        clique.push_back(nodo);
+        sumaDeLaClique += valorVariablePorColor[i];
+      }
     }
+
+    if(sumaDeLaClique > valorWj) {
+      // La desigualdad de esta clique viola a la solucion actual
+      // Genero nueva restriccion
+      encontreCliqueNueva = true;
+      int longitudNombreDeDesigualdad = 2 + ceil(log10(numeroDeDesigualdadClique));
+      char* nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
+      sprintf(nombreDeLaDesigualdad,"k_%d", numeroDeDesigualdadClique);
+      agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos, nombreDeLaDesigualdad);
+      numeroDeDesigualdadClique++;
+    }
+
+    indicePrimerNodoNoUsado++;
   }
-  if(sumaDeLaClique > valorWj) {
-    // La desigualdad de esta clique viola a la solucion actual
-    // Genero nueva restriccion
-    int longitudNombreDeDesigualdad = 2 + ceil(log10(numeroDeDesigualdadClique));
-    char* nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
-    sprintf(nombreDeLaDesigualdad,"k_%d", numeroDeDesigualdadClique);
-    agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos, nombreDeLaDesigualdad);
-    numeroDeDesigualdadClique++;
-  }
+
   return numeroDeDesigualdadClique;
 }
 
@@ -595,13 +607,13 @@ void agregarPlanosDeCorte(CPXENVptr env, CPXLPptr lp, Grafo grafo, int iteracion
   int cantidadDeNodos = grafo.getCantidadDeNodos();
   int cantidadDeVariables = CPXgetnumcols(env, lp);
   double *solucion = new double[cantidadDeVariables];
-  char *archivoResultado = new char[26 + 2];
+  char *archivoResultado = new char[27 + 2];
   int numeroDeDesigualdadClique = 1;
   for(int i = 0; i < iteracionesPlanosDeCorte; i++) {
     resolverLP(env, lp);
     CPXgetx(env, lp, solucion, 0, cantidadDeVariables - 1);
-    sprintf(archivoResultado,"resultados_temporales_%d.col", i);
-    generarResultados(env, lp, cantidadDeNodos, 10.0, archivoResultado);
+    //sprintf(archivoResultado,"resultados_temporales_%d.sol", i);
+    //generarResultados(env, lp, cantidadDeNodos, 10.0, archivoResultado);
     numeroDeDesigualdadClique = agregarPlanosDeCortePorDesigualdadClique(env, lp, solucion, grafo, numeroDeDesigualdadClique);
     agregarPlanosDeCortePorDesigualdadAgujeroImpar(env, lp, solucion, grafo);
   }
