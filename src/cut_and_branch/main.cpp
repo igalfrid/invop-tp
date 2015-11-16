@@ -7,6 +7,7 @@ ILOSTLBEGIN
 #include "Grafo.h"
 
 #define TOL 1E-05
+#define IT_PLANOS_DE_CORTE 3
 
 void generarVariablesParaCombinacionesDeLosNodos(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos, int longitudNodo) {
   // Agrego las variables por todos cada combinacion de nodo
