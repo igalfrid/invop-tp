@@ -127,7 +127,6 @@ void generarRestriccionPorParticion(CPXENVptr env, CPXLPptr lp,
                                     int numeroDeParticion) {
   // Agregamos la restriccion
   int cantidadDeNodosEnLaParticion = particion.getCantidadDeNodos();
-  int nodo;
   int ccnt = 0, rcnt = 1, nzcnt = 0;
   char *sense = new char[rcnt];   // Sentido de la desigualdad. 'G' es mayor o
                                   // igual y 'E' para igualdad.
@@ -247,8 +246,6 @@ void generarRestriccionesColParaArista(CPXENVptr env, CPXLPptr lp,
 
 void generarLP(CPXENVptr env, CPXLPptr lp, Grafo grafo) {
   int cantidadDeNodos = grafo.getCantidadDeNodos();
-  int longitudNombreVariable;
-  int status;
 
   // Generamos las variables
   int longitudNodo = ceil(log10(cantidadDeNodos));
@@ -280,8 +277,7 @@ void generarLP(CPXENVptr env, CPXLPptr lp, Grafo grafo) {
   }
 
   // Escribimos el problema a un archivo .lp.
-  status = CPXwriteprob(env, lp, "modelo.lp", NULL);
-
+  int status = CPXwriteprob(env, lp, "modelo.lp", NULL);
   if (status) {
     cerr << "Problema escribiendo modelo" << endl;
     exit(1);
@@ -363,16 +359,17 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   // Chequeamos el estado de la solucion.
   int solstat;
   char statstring[510];
-  CPXCHARptr p;
+
   solstat = CPXgetstat(env, lp);
-  p = CPXgetstatstring(env, solstat, statstring);
+  CPXgetstatstring(env, solstat, statstring);
   string statstr(statstring);
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
   return endtime - inittime;
 }
 
 void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
-                       double tiempoDeCorrida, string nombreDelArchivoDeSalida) {
+                       double tiempoDeCorrida,
+                       string nombreDelArchivoDeSalida) {
   double objval;
   int status = CPXgetobjval(env, lp, &objval);
 
@@ -484,6 +481,10 @@ Grafo leerArchivoDeEntrada(string nombreDelArchivo) {
 }
 
 int main(int argc, char **argv) {
+  if (argc < 3) {
+    cerr << "Uso: " << argv[0] << " <archivoInstancia> <archivoSalida>" << endl;
+    exit(1);
+  }
   // Leemos el archivo y obtenemos el grafo
   string nombreDelArchivoDeEntrada(argv[1]);
   string nombreDelArchivoDeSalida(argv[2]);

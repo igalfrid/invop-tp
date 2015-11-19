@@ -11,11 +11,11 @@ void Grafo::setCantidadDeNodos(int cantidad) {
   this->cantidadDeNodos = cantidad;
 }
 
-int Grafo::getCantidadDeNodos() { return this->cantidadDeNodos; }
+int Grafo::getCantidadDeNodos() { return cantidadDeNodos; }
 
-int Grafo::getCantidadDeAristas() { return this->aristas.size(); }
+int Grafo::getCantidadDeAristas() { return aristas.size(); }
 
-int Grafo::getCantidadDeParticiones() { return this->particiones.size(); }
+int Grafo::getCantidadDeParticiones() { return particiones.size(); }
 
 void Grafo::agregarArista(int origen, int destino) {
   // Las aristas deben pertenecer al grafo
@@ -31,7 +31,6 @@ void Grafo::agregarArista(int origen, int destino) {
   }
 
   // Siempre el origen es menor que el destino
-  int origenArista, destinoArista;
   if (origen > destino) {
     // Si el destino es menor que el origen llamo invirtiendo los parametros
     this->agregarArista(destino, origen);
@@ -42,6 +41,7 @@ void Grafo::agregarArista(int origen, int destino) {
     // Si ya son adyacentes no vuelvo a agregar la arista
     return;
   }
+
   Arista arista = Arista(origen, destino);
   aristas.push_back(arista);
 }
