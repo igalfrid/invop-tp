@@ -9,8 +9,8 @@ class Arista {
 
     public:
         Arista(int origen, int destino);
-        int getOrigen();
-        int getDestino();
+        int getOrigen() const;
+        int getDestino() const;
 };
 
 #endif
