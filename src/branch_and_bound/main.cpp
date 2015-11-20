@@ -4,120 +4,170 @@ ILOSTLBEGIN
 #include <string>
 #include <vector>
 #include <list>
-#include "../grafo/Grafo.h"
+#include "Grafo.h"
+#include <cstdio>
 
 #define TOL 1E-05
 
-void generarVariablesParaCombinacionesDeLosNodos(CPXENVptr env, CPXLPptr lp,
-                                                 int cantidadDeNodos,
-                                                 int longitudNodo) {
-  // Agrego las variables por todos cada combinacion de nodo
-  int status;
-  int longitudNombreVariable = 2 + 2 * longitudNodo;
-  double ub[cantidadDeNodos][cantidadDeNodos],
-      lb[cantidadDeNodos][cantidadDeNodos],
-      objfun[cantidadDeNodos][cantidadDeNodos];
-  char *colnames[cantidadDeNodos][cantidadDeNodos],
-      xctype[cantidadDeNodos][cantidadDeNodos];
-  for (int i = 0; i < cantidadDeNodos; i++) {
-    for (int j = 0; j < cantidadDeNodos; j++) {
-      ub[i][j] = 1;
-      lb[i][j] = 0.0;
-      colnames[i][j] = new char[longitudNombreVariable];
-      sprintf(colnames[i][j], "x%d_%d", i + 1, j + 1);
-      objfun[i][j] = 0;
-      xctype[i][j] = 'B';
+typedef struct t_ctx {
+  CPXENVptr env;
+  CPXLPptr lp;
+} lpcontext;
+
+/*
+   agregarVariablesParaNodos agrega una variable para cada combinacion (nodo,
+   color)
+   estas son variables booleanas, que valen 1 si el nodo n fue pintado con el
+   color c.
+   Las variables se agregan en el siguiente orden:
+    - x11, x21, x31, ..., xn1, x12, x22, ..., xn2, ..., x1m, x2m, ..., xnm
+   Entonces, la variable xij va a tener indice (nodos * i) + j
+*/
+void agregarVariablesParaNodos(lpcontext &ctx, int nodos, int colores) {
+  vector<double> objective(nodos, 0.0);
+  vector<double> lowerbound(nodos, 0.0);
+  vector<double> upperbound(nodos, 1.0);
+  vector<char> ctype(nodos, CPX_BINARY);
+
+  // Para cada color, agregamos una variable por cada nodo, xn_c que dice que
+  // el nodo n fue pintado del color c.
+  for (int c = 0; c < colores; c++) {
+    vector<char *> colnames(nodos, NULL);
+    for (int n = 0; n < nodos; n++) {
+      asprintf(&colnames[n], "x%d_%d", n + 1, c + 1);
     }
-    status = CPXnewcols(env, lp, cantidadDeNodos, objfun[i], lb[i], ub[i],
-                        xctype[i], colnames[i]);
+
+    /*
+       Dado que en c++ los elementos de los vectores se almacenan de forma
+       contigua, devolver la direccion del primer elemento es equivalente
+       a devolver un puntero al array que lo contiene.
+
+       Esto es una forma facil de convertir de vector<double> a double*
+    */
+    double *obj = &objective[0];
+    double *lb = &lowerbound[0];
+    double *ub = &upperbound[0];
+    char *ct = &ctype[0];
+    char **cnames = &colnames[0];
+
+    int status = CPXnewcols(ctx.env, ctx.lp, nodos, obj, lb, ub, ct, cnames);
     if (status) {
-      cerr << "Problema agregando las variables por cada combinacion de nodo"
-           << endl;
+      cerr << "Problema agregando variables de coloreo de nodos" << endl;
       exit(1);
     }
-  }
-  for (int i = 0; i < cantidadDeNodos; i++) {
-    for (int j = 0; j < cantidadDeNodos; j++) {
-      delete[] colnames[i][j];
+
+    for (int n = 0; n < nodos; n++) {
+      free(colnames[n]);
     }
   }
 }
 
-void generarVariablesParaCadaColor(CPXENVptr env, CPXLPptr lp,
-                                   int cantidadDeNodos, int longitudNodo) {
-  // Agrego las columnas por cada color
-  int longitudNombreVariable = 1 + longitudNodo;
-  int status;
-  double ubw[cantidadDeNodos], lbw[cantidadDeNodos], objfunw[cantidadDeNodos];
-  char *colnamesw[cantidadDeNodos], xctypew[cantidadDeNodos];
-  for (int i = 0; i < cantidadDeNodos; i++) {
-    ubw[i] = 1;
-    lbw[i] = 0.0;
-    colnamesw[i] = new char[longitudNombreVariable];
-    sprintf(colnamesw[i], "w%d", i + 1);
-    objfunw[i] = 1;
-    xctypew[i] = 'B';
+// agregarVariablesParaColores agrega una variable booleana para cada color.
+// La variable se pone en 1 si el color es usado para pintar algun nodo o no.
+// las variables se agregan en orden ascendente (w1, w2, ..., wm)
+void agregarVariablesParaColores(lpcontext &ctx, int colores) {
+  vector<double> objective(colores, 0.0);
+  vector<double> lowerbound(colores, 0.0);
+  vector<double> upperbound(colores, 1.0);
+  vector<char> ctype(colores, CPX_BINARY);
+
+  vector<char *> colnames(colores, NULL);
+
+  for (int c = 0; c < colores; c++) {
+    asprintf(&colnames[c], "w%d", c + 1);
   }
-  status = CPXnewcols(env, lp, cantidadDeNodos, objfunw, lbw, ubw, xctypew,
-                      colnamesw);
+
+  /*
+    Dado que en c++ los elementos de los vectores se almacenan de forma
+    contigua, devolver la direccion del primer elemento es equivalente
+    a devolver un puntero al array que lo contiene.
+
+    Esto es una forma facil de convertir de vector<double> a double*
+  */
+  double *obj = &objective[0];
+  double *lb = &lowerbound[0];
+  double *ub = &upperbound[0];
+  char *ct = &ctype[0];
+  char **cnames = &colnames[0];
+
+  int status = CPXnewcols(ctx.env, ctx.lp, colores, obj, lb, ub, ct, cnames);
   if (status) {
     cerr << "Problema agregando las variables por cada color de nodo" << endl;
     exit(1);
   }
-  for (int i = 0; i < cantidadDeNodos; i++) {
-    delete[] colnamesw[i];
+
+  for (int c = 0; c < colores; c++) {
+    free(colnames[c]);
   }
 }
+// agregarRestriccionesDeColor agrega restricciones que dicen que si hay al
+// menos
+// un nodo n pintado con el color c, entonces wc tiene que estar pintada.
+void agregarRestriccionesDeColor(lpcontext &ctx, int nodos, int colores) {
+  for (int i = 0; i < colores; i++) {
+    // las restricciones que agregamos aca son del estilo:
+    // x_11 - w1 < 0
+    // x_21 - w1 < 0
+    // ...
+    // x_n1 - w1 < 0
+    // para w1 ... wm
 
-void generarRestriccionesWp(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
-                            int longitudNodo) {
-  // Agrego las restricciones wp que me dicen que si una variable p esta
-  // seteada, entonces la w tiene que estar seteada
-  int longitudNombreVariable = 4 + 2 * longitudNodo;
-  for (int i = 0; i < cantidadDeNodos; i++) {
-    // Generamos de a una las restricciones.
-    // Estos valores indican:
-    // ccnt = numero nuevo de columnas en las restricciones.
-    // rcnt = cuantas restricciones se estan agregando.
-    // nzcnt = # de coeficientes != 0 a ser agregados a la matriz. Solo se pasan
-    // los valores que no son cero.
+    int ccnt = 0;          // numero nuevo de columnas en las restricciones.
+    int rcnt = nodos;      // cuantas restricciones se estan agregando.
+    int nzcnt = nodos * 2; // cantidad de variables con coefs no nulos.
 
-    int ccnt = 0, rcnt = cantidadDeNodos, nzcnt = 0;
-    char *sense = new char[rcnt]; // Sentido de la desigualdad. 'G' es mayor o
-                                  // igual y 'E' para igualdad.
-    double *rhs =
-        new double[rcnt];        // Termino independiente de las restricciones.
-    int *matbeg = new int[rcnt]; // Posicion en la que comienza cada restriccion
-                                 // en matind y matval.
-    int *matind = new int[rcnt * 2]; // Array con los indices de las variables
-                                     // con coeficientes != 0 en la desigualdad.
-    double *matval = new double[rcnt * 2]; // Array que en la posicion i tiene
-                                           // coeficiente ( != 0) de la variable
-                                           // cutind[i] en la restriccion.
-    char *rownames[rcnt];
+    // sentido de la desigualdad. 'L' es <=, 'G' >= y 'E' ==
+    vector<char> sentido(rcnt, 'L');
 
-    for (int j = 0; j < cantidadDeNodos; j++) {
-      sense[j] = 'L'; // Son por menor o igual
-      rhs[j] = 0.0;   // El termino independiente siempre es 1
+    // indep es el termino independiente de cada restriccion.
+    vector<double> indep(rcnt, 0.0);
 
-      matbeg[j] = nzcnt; // ASI ESTABA EN EL EJEMPLO, NO ENTIENDO BIEN QUE ES
-      matval[nzcnt] = 1; // El valor del coeficiente de cada termino es 1
-      matval[nzcnt + 1] = -1; // El valor del coeficiente de cada w es -1
+    // begin tiene las pos (de indexes y coefs) en donde empieza c/restriccion
+    // por ej: begin[5] es el indice en indexes y coefs de la sexta restriccion
+    vector<int> begin(rcnt, 0);
 
-      matind[nzcnt] = i * cantidadDeNodos + j;
-      matind[nzcnt + 1] = cantidadDeNodos * cantidadDeNodos + j;
+    // indexes tiene los indices de las variables con coefs != 0
+    vector<int> indexes(rcnt * 2, 0);
 
-      rownames[j] = new char[longitudNombreVariable];
-      sprintf(rownames[j], "wp_%d_%d", i + 1, j + 1);
+    /* coefs es un array que en la posicion i tiene el coeficiente ( != 0) de
+       la variable cutind[i] en una restriccion */
+    vector<double> coefs(rcnt * 2);
 
-      nzcnt += 2;
+    vector<char *> rownames(nodos, NULL);
+
+    // empezamos con nzcnt = 0 y le vamos sumando 2 por iteracion, porque
+    // por cada nodo vamos a agregar 2 variables a la row (xji - wi <= 0.0)
+    for (int j = 0; j < nodos; j++) {
+      begin[j] = j * 2;
+      coefs[j * 2] = 1;      // El valor del coeficiente de cada xij es 1
+      coefs[j * 2 + 1] = -1; // El valor del coeficiente de cada w es -1
+
+      // la variable xij esta en la posicion (i * nodos) + j
+      // la variable wj esta en la posicion (nodos * colores) + j
+      // esto es asi por el orden en que se agregaron las variables.
+      indexes[j * 2] = (i * nodos) + j;
+      indexes[j * 2 + 1] = (nodos * nodos) + j;
+
+      asprintf(&rownames[j], "wp_%d_%d", i + 1, j + 1);
     }
+
+    char *sense = &sentido[0];
+    double *rhs = &indep[0];
+    int *matbeg = &begin[0];
+    int *matind = &indexes[0];
+    double *matval = &coefs[0];
+    char **rn = &rownames[0];
+
     // Esta rutina agrega la restriccion al lp.
-    int status = CPXaddrows(env, lp, ccnt, rcnt, nzcnt, rhs, sense, matbeg,
-                            matind, matval, NULL, rownames);
+    int status = CPXaddrows(ctx.env, ctx.lp, ccnt, rcnt, nzcnt, rhs, sense,
+                            matbeg, matind, matval, NULL, rn);
     if (status) {
       cerr << "Problema agregando las restricciones wp" << endl;
       exit(1);
+    }
+
+    for (int j = 0; j < nodos; j++) {
+      free(rownames[j]);
     }
   }
 }
@@ -184,8 +234,8 @@ void generarRestriccionPorParticion(CPXENVptr env, CPXLPptr lp,
 }
 
 void generarRestriccionesColParaArista(CPXENVptr env, CPXLPptr lp,
-                                       int cantidadDeNodos, int longitudNodo,
-                                       int origen, int destino) {
+                                       int cantidadDeNodos, int origen,
+                                       int destino) {
   // Genero las restricciones col que me dicen que los nodos adyacentes no
   // pueden tener el mismo color
 
@@ -195,7 +245,7 @@ void generarRestriccionesColParaArista(CPXENVptr env, CPXLPptr lp,
   // rcnt = cuantas restricciones se estan agregando.
   // nzcnt = # de coeficientes != 0 a ser agregados a la matriz. Solo se pasan
   // los valores que no son cero.
-  int longitudNombreVariable = 6 + 3 * longitudNodo;
+  int longitudNombreVariable = 100;
   int ccnt = 0, rcnt = cantidadDeNodos, nzcnt = 0;
   char *sense = new char[rcnt];   // Sentido de la desigualdad. 'G' es mayor o
                                   // igual y 'E' para igualdad.
@@ -244,40 +294,31 @@ void generarRestriccionesColParaArista(CPXENVptr env, CPXLPptr lp,
   }
 }
 
-void generarLP(CPXENVptr env, CPXLPptr lp, Grafo grafo) {
-  int cantidadDeNodos = grafo.getCantidadDeNodos();
-
+void generarLP(lpcontext &ctx, Grafo grafo) {
+  int nodos = grafo.getCantidadDeNodos();
+  int maxColores = nodos;
   // Generamos las variables
-  int longitudNodo = ceil(log10(cantidadDeNodos));
-  generarVariablesParaCombinacionesDeLosNodos(env, lp, cantidadDeNodos,
-                                              longitudNodo);
-  generarVariablesParaCadaColor(env, lp, cantidadDeNodos, longitudNodo);
+  agregarVariablesParaNodos(ctx, nodos, maxColores);
+
+  agregarVariablesParaColores(ctx, maxColores);
 
   // Generamos las restricciones WP
-  generarRestriccionesWp(env, lp, cantidadDeNodos, longitudNodo);
+  agregarRestriccionesDeColor(ctx, nodos, maxColores);
 
   // Generamos las restricciones para las aristas
-  list<Arista> aristas = grafo.getAristas();
-  list<Arista>::iterator itAristas;
-  for (itAristas = aristas.begin(); itAristas != aristas.end(); ++itAristas) {
-    generarRestriccionesColParaArista(env, lp, cantidadDeNodos, longitudNodo,
-                                      itAristas->getOrigen(),
-                                      itAristas->getDestino());
+  for (auto const &a : grafo.getAristas()) {
+    generarRestriccionesColParaArista(ctx.env, ctx.lp, nodos, a.getOrigen(),
+                                      a.getDestino());
   }
 
   // Generamos las restricciones para las particiones
-  list<Particion> particiones = grafo.getParticiones();
-  list<Particion>::iterator itParticiones;
-  int numeroDeParticion = 1;
-  for (itParticiones = particiones.begin(); itParticiones != particiones.end();
-       ++itParticiones) {
-    generarRestriccionPorParticion(env, lp, *itParticiones, cantidadDeNodos,
-                                   numeroDeParticion);
-    numeroDeParticion++;
+  int numParticion = 1;
+  for (auto const &p : grafo.getParticiones()) {
+    generarRestriccionPorParticion(ctx.env, ctx.lp, p, nodos, numParticion++);
   }
 
   // Escribimos el problema a un archivo .lp.
-  int status = CPXwriteprob(env, lp, "modelo.lp", NULL);
+  int status = CPXwriteprob(ctx.env, ctx.lp, "modelo.lp", NULL);
   if (status) {
     cerr << "Problema escribiendo modelo" << endl;
     exit(1);
@@ -369,7 +410,7 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
 
 void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
                        double tiempoDeCorrida,
-                       string nombreDelArchivoDeSalida) {
+                       const string &nombreDelArchivoDeSalida) {
   double objval;
   int status = CPXgetobjval(env, lp, &objval);
 
@@ -486,10 +527,10 @@ int main(int argc, char **argv) {
     exit(1);
   }
   // Leemos el archivo y obtenemos el grafo
-  string nombreDelArchivoDeEntrada(argv[1]);
-  string nombreDelArchivoDeSalida(argv[2]);
+  const string instanceFilename(argv[1]);
+  const string outputFilename(argv[2]);
 
-  Grafo grafo = leerArchivoDeEntrada(nombreDelArchivoDeEntrada);
+  Grafo grafo = leerArchivoDeEntrada(instanceFilename);
 
   cout << "El grafo tiene " << grafo.getCantidadDeNodos() << " nodos" << endl;
   cout << "El grafo tiene " << grafo.getCantidadDeAristas() << " aristas"
@@ -510,20 +551,23 @@ int main(int argc, char **argv) {
   }
 
   // Creo el LP.
-  lp = CPXcreateprob(env, &status, nombreDelArchivoDeEntrada.c_str());
+  lp = CPXcreateprob(env, &status, instanceFilename.c_str());
   if (lp == NULL) {
     cerr << "Error creando el LP" << endl;
     exit(1);
   }
+
+  lpcontext ctx = {env, lp};
+
   setearParametrosDeCPLEXParaBranchAndBoundPuro(env);
 
   // Ahora si generamos el LP a partir del grafo
-  generarLP(env, lp, grafo);
+  generarLP(ctx, grafo);
 
   double tiempoDeCorrida = resolverLP(env, lp);
 
   generarResultados(env, lp, grafo.getCantidadDeNodos(), tiempoDeCorrida,
-                    nombreDelArchivoDeSalida);
+                    outputFilename);
 
   return 0;
 }
