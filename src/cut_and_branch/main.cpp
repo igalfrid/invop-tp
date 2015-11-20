@@ -250,7 +250,7 @@ void setearParametrosParaCplex(CPXENVptr env) {
   }
   // Por ahora no va a ser necesario, pero mas adelante si. Setea el tiempo
   // limite de ejecucion.
-  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 3600);
+  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 2*3600);
 
   if (status) {
     cerr << "Problema seteando el tiempo limite" << endl;
@@ -468,7 +468,7 @@ void desRelajarLP(CPXENVptr env, CPXLPptr lp) {
 * Ordena los valores de forma descendiente y los indices los alinea a las posiciones de los valores.
 * Utilizo selection sort.
 */
-void ordenarDescendientemente(double * valores, pair<int, int> * indices, int cantidad) {
+void ordenarDescendientemente(double * valores, int * indices, int cantidad) {
   double valorMaximo;
   int indiceMaximo;
   for(int i=0; i<cantidad; i++) {
@@ -488,7 +488,7 @@ void ordenarDescendientemente(double * valores, pair<int, int> * indices, int ca
 /**
 * Agrega una restriccion al lp por la suma de los nodos de color j menor o igual al wj
 */
-void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colorJ, int cantidadDeNodos, char* nombreDesigualdad) {
+void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colorJ, int cantidadDeNodos, int coeficienteWj, char* nombreDesigualdad) {
   // Estos valores indican:
   // ccnt = numero nuevo de columnas en las restricciones.
   // rcnt = cuantas restricciones se estan agregando.
@@ -520,7 +520,7 @@ void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colo
   }
   // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
   matind[i] = cantidadDeNodos * cantidadDeNodos + (colorJ - 1);
-  matval[i] = -1; // El valor del coeficiente de wj es -1
+  matval[i] = coeficienteWj; // El valor del coeficiente de wj
 
   // Esta rutina agrega la restriccion al lp.
   int status = CPXaddrows(env, lp, columnasAAgregar, restriccionesAAgregar, coeficientesDistintosDe0, rhs, sense, matbeg, matind, matval, NULL, rownames);
@@ -542,20 +542,20 @@ void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos, int colo
 * cuya desigualdad sea violada por la solucion y se agrega la restriccion
 * correspondiente al LP
 */
-int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXLPptr lp, double * valorVariablePorColor, pair<int, int> * indices, double valorWj, Grafo grafo, int numeroDeDesigualdadClique){
+int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXLPptr lp, double * valorVariablePorColor, int * indices, int colorJ, double valorWj, Grafo grafo, int numeroDeDesigualdadClique){
   int cantidadDeNodos = grafo.getCantidadDeNodos();
-  int colorJ = indices[0].second;
   int nodo;
-  list<int> clique;
   int indicePrimerNodoNoUsado = 0;
   bool encontreCliqueNueva = false;
+  int coeficienteWj = -1;
+  list<int> clique;
   while(indicePrimerNodoNoUsado < cantidadDeNodos && !encontreCliqueNueva) {
     clique.clear();
 
-    clique.push_back(indices[indicePrimerNodoNoUsado].first);
+    clique.push_back(indices[indicePrimerNodoNoUsado]);
     double sumaDeLaClique = valorVariablePorColor[0];
     for(int i=1; i<cantidadDeNodos; i++) {
-      nodo = indices[i].first;
+      nodo = indices[i];
       if(grafo.esAdyacenteATodos(clique, nodo)) {
         clique.push_back(nodo);
         sumaDeLaClique += valorVariablePorColor[i];
@@ -569,7 +569,7 @@ int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXL
       int longitudNombreDeDesigualdad = 2 + ceil(log10(numeroDeDesigualdadClique));
       char* nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
       sprintf(nombreDeLaDesigualdad,"k_%d", numeroDeDesigualdadClique);
-      agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos, nombreDeLaDesigualdad);
+      agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos, coeficienteWj, nombreDeLaDesigualdad);
       numeroDeDesigualdadClique++;
     }
 
@@ -579,45 +579,187 @@ int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(CPXENVptr env, CPXL
   return numeroDeDesigualdadClique;
 }
 
-int agregarPlanosDeCortePorDesigualdadClique(CPXENVptr env, CPXLPptr lp, double* solucion, Grafo grafo, int numeroDeDesigualdadClique) {
-  int cantidadDeNodos = grafo.getCantidadDeNodos();
-  double * valorVariablePorColor = new double[cantidadDeNodos];
-  pair<int, int> * indices = new pair<int, int>[cantidadDeNodos];
-  for(int j = 0; j < cantidadDeNodos; j++) {
-    // Para cada color buscamos una clique maximal y agregamos la restriccion
-    // El nodo i con el color j es sol[i*cantidadDeNodos + j]
-    // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
-    for(int i = 0; i < cantidadDeNodos; i++) {
-      valorVariablePorColor[i] = solucion[i * cantidadDeNodos + j];
-      indices[i] = make_pair(i+1, j+1);
-    }
-    double valorWj = solucion[cantidadDeNodos*cantidadDeNodos + j];
-    ordenarDescendientemente(valorVariablePorColor, indices, cantidadDeNodos);
-    numeroDeDesigualdadClique = buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(env, lp, valorVariablePorColor, indices, valorWj, grafo, numeroDeDesigualdadClique);
+/**
+* Auxiliar sacar a un Util
+*/
+void desplazarADerechaUnaPosicionAPartirDe(int * items, int desde, int cantidad) {
+  for(int i=cantidad-1; i >= desde; i--) {
+    items[i+1] = items[i];
   }
-  delete [] valorVariablePorColor;
-  delete [] indices;
-  return numeroDeDesigualdadClique;
 }
 
-void agregarPlanosDeCortePorDesigualdadAgujeroImpar(CPXENVptr env, CPXLPptr lp, double* solucion, Grafo grafo) {
+/**
+* Auxiliar sacar a un Util
+*/
+void desplazarAIzquierdaUnaPosicionAPartirDe(int * items, int desde, int cantidad) {
+  for(int i=desde; i<cantidad; i++) {
+    items[i-1] = items[i];
+  }
+}
+/**
+* Auxiliar sacar a un Util
+*/
+int indiceEn(int * items, int item, int cantidad) {
+  for(int i=0; i<cantidad; i++) {
+    if(items[i] == item) {
+      return i;
+    }
+  }
+  return -1;
+}
 
+/**
+* Dada la solucion para un color ordenada descendentemente busca un agujero
+* impar cuya desigualdad sea violada por la solucion y se agrega la restriccion
+* correspondiente al LP
+*/
+int buscarAgujeroImparQueVioleLaDesigualdadAgujeroImparYAgregarla(CPXENVptr env, CPXLPptr lp, double * valorVariablePorColor, int * indices, int colorJ, double valorWj, Grafo grafo, int numeroDeDesigualdadAgujeroImpar){
+
+  int cantidadDeNodos = grafo.getCantidadDeNodos();
+  int nodo;
+  int indiceEnSolucion;
+  double sumaDelAgujero = 0;
+  int * agujero = new int[cantidadDeNodos];
+  int cantidadDeNodosEnElAgujero = 0;
+
+  // Comienzo el agujero con una arista que tenga al nodo de mayor valor posible
+  int j = 0;
+  int i;
+  bool encontreArista = false;
+  while(j < cantidadDeNodos && !encontreArista) {
+    nodo = indices[0];
+    i = j + 1;
+    while(i < cantidadDeNodos && !encontreArista) {
+      if(grafo.sonAdyacentes(nodo, indices[i])) {
+        // Si son adyacentes entonces tengo una arista, agrego los primeros nodos
+        agujero[cantidadDeNodosEnElAgujero] = indices[0];
+        sumaDelAgujero += valorVariablePorColor[0];
+        cantidadDeNodosEnElAgujero++;
+        agujero[cantidadDeNodosEnElAgujero] = indices[i];
+        sumaDelAgujero += valorVariablePorColor[i];
+        cantidadDeNodosEnElAgujero++;
+        encontreArista = true;
+      }
+      i++;
+    }
+    j++;
+  }
+
+  if(!encontreArista) {
+    cout << "No encontre arista para comenzar a generar el agujero" << endl;
+    return numeroDeDesigualdadAgujeroImpar;
+  }
+  // Hasta aca solo tenemos dos nodos en el agujero
+
+  // Agrego nodos al agujero buscando entre cada par de nodos si
+  // puedo poner un nodo en el medio
+  bool agregueNodoAlAgujero;
+  int ultimoNodoAgregado;
+  double valorUltimoNodoAgregado;
+  list<int> nodos;
+  i = 1;
+  //while (i < cantidadDeNodosEnElAgujero) {
+    j = i;
+    agregueNodoAlAgujero = false;
+    while (j < cantidadDeNodosEnElAgujero){// && !agregueNodoAlAgujero) {
+      nodos.clear();
+      nodos.push_back(agujero[j]);
+      nodos.push_back(agujero[j-1]);
+
+      int k = 0;
+      //nodo = 1;
+      //while(nodo <= cantidadDeNodos && !agregueNodoAlAgujero) {
+      while(k < cantidadDeNodos){// && !agregueNodoAlAgujero) {
+        nodo = indices[k];
+        if(grafo.esAdyacenteATodos(nodos, nodo)) {
+          // Si el nodo es adyacente a los dos entonces lo puedo meter en el medio
+          if (indiceEn(agujero, nodo, cantidadDeNodosEnElAgujero) == -1) {
+            // El nodo no pertenece al agujero
+            desplazarADerechaUnaPosicionAPartirDe(agujero, j, cantidadDeNodosEnElAgujero);
+            agujero[j] = nodo;
+            indiceEnSolucion = indiceEn(indices, nodo, cantidadDeNodos);
+            valorUltimoNodoAgregado = valorVariablePorColor[indiceEnSolucion];
+            sumaDelAgujero += valorUltimoNodoAgregado;
+            ultimoNodoAgregado = nodo;
+            cantidadDeNodosEnElAgujero++;
+            agregueNodoAlAgujero = true;
+            i = 0;
+          }
+        }
+        k++;
+      }
+      j++;
+    }
+  //  i++;
+  //}
+
+  if(cantidadDeNodosEnElAgujero < 3) {
+    cout << "No encontre un agujero" << endl;
+    return numeroDeDesigualdadAgujeroImpar;
+  }
+
+  if(cantidadDeNodosEnElAgujero % 2 == 0) {
+    // Quiere decir que es un agujero par, debo sacar un nodo
+    int indiceEnAgujero = indiceEn(agujero, ultimoNodoAgregado, cantidadDeNodosEnElAgujero);
+    // Saco el ultimo nodo que agregue
+    desplazarAIzquierdaUnaPosicionAPartirDe(agujero, indiceEnAgujero+1, cantidadDeNodosEnElAgujero);
+    cantidadDeNodosEnElAgujero--;
+    sumaDelAgujero -= valorUltimoNodoAgregado;
+  }
+
+  int coeficienteWj = (cantidadDeNodosEnElAgujero - 1) / 2;
+  if(sumaDelAgujero > coeficienteWj * valorWj) {
+    // La desigualdad de este agujero impar viola a la solucion actual
+    // Genero nueva restriccion
+    list<int> agujeroImpar;
+    for(int i=0; i<cantidadDeNodosEnElAgujero; i++) {
+      agujeroImpar.push_back(agujero[i]);
+    }
+    int longitudNombreDeDesigualdad = 2 + ceil(log10(numeroDeDesigualdadAgujeroImpar));
+    char* nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
+    sprintf(nombreDeLaDesigualdad,"a_%d", numeroDeDesigualdadAgujeroImpar);
+
+    agregarDesigualdadALP(env, lp, agujeroImpar, colorJ, cantidadDeNodos, -coeficienteWj, nombreDeLaDesigualdad);
+    numeroDeDesigualdadAgujeroImpar++;
+  }
+
+  return numeroDeDesigualdadAgujeroImpar;
 }
 
 void agregarPlanosDeCorte(CPXENVptr env, CPXLPptr lp, Grafo grafo, int iteracionesPlanosDeCorte) {
   int cantidadDeNodos = grafo.getCantidadDeNodos();
   int cantidadDeVariables = CPXgetnumcols(env, lp);
   double *solucion = new double[cantidadDeVariables];
-  char *archivoResultado = new char[27 + 2];
+  double * valorVariablePorColor = new double[cantidadDeNodos];
+  int * indices = new int[cantidadDeNodos];
   int numeroDeDesigualdadClique = 1;
+  int numeroDeDesigualdadAgujeroImpar = 1;
+  bool agregueClique, agregueAgujero;
   for(int i = 0; i < iteracionesPlanosDeCorte; i++) {
     resolverLP(env, lp);
     CPXgetx(env, lp, solucion, 0, cantidadDeVariables - 1);
-    //sprintf(archivoResultado,"resultados_temporales_%d.sol", i);
-    //generarResultados(env, lp, cantidadDeNodos, 10.0, archivoResultado);
-    numeroDeDesigualdadClique = agregarPlanosDeCortePorDesigualdadClique(env, lp, solucion, grafo, numeroDeDesigualdadClique);
-    agregarPlanosDeCortePorDesigualdadAgujeroImpar(env, lp, solucion, grafo);
+    char *archivoResultado = new char[27 + 2];
+    sprintf(archivoResultado,"resultados_temporales_%d.sol", i);
+    generarResultados(env, lp, cantidadDeNodos, 10.0, archivoResultado);
+
+    // Para cada color busco desigualdades que violen la solucion obtenida
+    for(int j = 0; j < cantidadDeNodos; j++) {
+      // Para cada color buscamos una clique maximal y agregamos la restriccion
+      // El nodo i con el color j es sol[i*cantidadDeNodos + j]
+      // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
+      for(int i = 0; i < cantidadDeNodos; i++) {
+        valorVariablePorColor[i] = solucion[i * cantidadDeNodos + j];
+        indices[i] = i+1;
+      }
+      double valorWj = solucion[cantidadDeNodos*cantidadDeNodos + j];
+      int colorJ = j + 1;
+      ordenarDescendientemente(valorVariablePorColor, indices, cantidadDeNodos);
+      numeroDeDesigualdadClique = buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(env, lp, valorVariablePorColor, indices, colorJ, valorWj, grafo, numeroDeDesigualdadClique);
+      numeroDeDesigualdadAgujeroImpar = buscarAgujeroImparQueVioleLaDesigualdadAgujeroImparYAgregarla(env, lp, valorVariablePorColor, indices, colorJ, valorWj, grafo, numeroDeDesigualdadAgujeroImpar);
+    }
   }
+  delete [] valorVariablePorColor;
+  delete [] indices;
   delete[] solucion;
 }
 

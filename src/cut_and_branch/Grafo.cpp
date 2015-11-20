@@ -90,3 +90,13 @@ bool Grafo::esAdyacenteATodos(list<int> nodos, int nodo) {
   }
   return true;
 }
+
+bool Grafo::estaContenidoEn(list<int> nodos, int nodo) {
+  list<int>::iterator it;
+  for (it=nodos.begin(); it!=nodos.end(); ++it) {
+    if(*it == nodo) {
+      return true;
+    }
+  }
+  return false;
+}
