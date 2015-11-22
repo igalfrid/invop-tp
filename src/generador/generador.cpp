@@ -3,44 +3,51 @@
 ILOSTLBEGIN
 #include <string>
 #include <vector>
+#include <list>
 
-int generarAristas(ofstream &archivo, int cantidadDeNodos, double densidadDeAristas) {
+using namespace std;
+
+list< pair<int,int> > generarAristas(int cantidadDeNodos, double densidadDeAristas) {
+  list< pair<int,int> > aristas;
   int cantidadDeAristas = 0;
   for(int i = 1; i <= cantidadDeNodos; i++) {
     for(int j = i + 1; j <= cantidadDeNodos; j++) {
       double random = ((double) rand() / (RAND_MAX));
       if(random <= densidadDeAristas) {
-        archivo << "e " << i << " " << j << endl;
-        cantidadDeAristas++;
+        pair<int,int> arista = make_pair(i, j);
+        aristas.push_back(arista);
       }
     }
   }
-  return cantidadDeAristas;
-}
-
-int generarParticion(ofstream &archivo, int cantidadDeNodosPorParticion, int nodoActual) {
-  archivo << "v " << cantidadDeNodosPorParticion;
-  for(int i = 0; i < cantidadDeNodosPorParticion; i++) {
-    archivo << " " << nodoActual;
-    nodoActual++;
-  }
-  archivo << endl;
-  return nodoActual;
+  return aristas;
 }
 
 void generarParticiones(ofstream &archivo, int cantidadDeNodos, int cantidadDeParticiones) {
-  int cantidadDeNodosPorParticion = cantidadDeNodos / cantidadDeParticiones;
-  int cantidadDeNodosUltimaParticion = cantidadDeNodosPorParticion;
-  if(cantidadDeNodos % cantidadDeParticiones > 0) {
-    cantidadDeNodosUltimaParticion += cantidadDeNodos % cantidadDeParticiones;
+  // Creo las n particiones
+  list<int> particiones[cantidadDeNodos];
+
+  // Recorro los nodos y coloco a cada nodo en la particion que le corresponde
+  for(int i=1; i<=cantidadDeNodos; i++) {
+    int particion = rand() % cantidadDeParticiones;
+    particiones[particion].push_back(i);
   }
-  int nodoActual = 1;
-  // Genero todas las particiones menos la ultima
-  for(int i = 0; i < cantidadDeParticiones - 1; i++) {
-    nodoActual = generarParticion(archivo, cantidadDeNodosPorParticion, nodoActual);
+
+  // Escrivo las particiones en el archivo
+  for(int i=0; i<cantidadDeParticiones; i++) {
+    archivo << "v " << particiones[i].size();
+    list<int>::iterator it;
+    for (it=particiones[i].begin(); it!=particiones[i].end(); ++it) {
+      archivo << " " << *it;
+    }
+    archivo << endl;
   }
-  // Genero la ultimaparticion
-  generarParticion(archivo, cantidadDeNodosUltimaParticion, nodoActual);
+}
+
+void escribirAristas(ofstream &archivo, list< pair<int,int> > aristas) {
+  list< pair<int,int> >::iterator it;
+  for (it=aristas.begin(); it!=aristas.end(); ++it) {
+    archivo << "e " << it->first << " " << it->second << endl;
+  }
 }
 
 int main(int argc, char **argv) {
@@ -49,16 +56,23 @@ int main(int argc, char **argv) {
   int cantidadDeParticiones = atoi(argv[3]);
   char* nombreDeArchivo = argv[4];
 
-  string outputfile = "instancia.col";
+  // Genero las aristas
+  list< pair<int,int> > aristas = generarAristas(cantidadDeNodos, densidadDeAristas);
+
+  // Comienzo a escribir el archivo
   ofstream archivo(nombreDeArchivo);
-
   archivo << "c Instancia generada aleatoriamente" << endl;
-  archivo << "p edge " << cantidadDeNodos << " " << 5 << " " << cantidadDeParticiones << endl;
+  archivo << "p edge " << cantidadDeNodos << " " << aristas.size() << " " << cantidadDeParticiones << endl;
 
+  // Genero las particiones
   generarParticiones(archivo, cantidadDeNodos, cantidadDeParticiones);
-  int cantidadDeAristas = generarAristas(archivo, cantidadDeNodos, densidadDeAristas);
 
+  // Escribo aristas
+  escribirAristas(archivo, aristas);
+
+  // Cierro el archivo
   archivo.close();
+
   return 0;
 }
 
