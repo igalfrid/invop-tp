@@ -379,23 +379,23 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
   }
 }
 
-double resolverLP(CPXENVptr env, CPXLPptr lp) {
+double resolverLP(lpcontext &ctx) {
   // Resolvemos usando CPLEX pero branch and bound
   double inittime, endtime;
   int status;
 
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
-  status = CPXgettime(env, &inittime);
+  status = CPXgettime(ctx.env, &inittime);
 
   // Optimizamos el problema.
-  status = CPXmipopt(env, lp);
+  status = CPXmipopt(ctx.env, ctx.lp);
 
   if (status) {
     cerr << "Problema optimizando CPLEX, status: " << status << endl;
     exit(1);
   }
 
-  status = CPXgettime(env, &endtime);
+  status = CPXgettime(ctx.env, &endtime);
 
   if (status) {
     cerr << "Problema obteniendo el tiempo luego de terminar el lp" << endl;
@@ -405,8 +405,8 @@ double resolverLP(CPXENVptr env, CPXLPptr lp) {
   // Chequeamos el estado de la solucion.
   int solstat;
   char statstring[510];
-  solstat = CPXgetstat(env, lp);
-  CPXgetstatstring(env, solstat, statstring);
+  solstat = CPXgetstat(ctx.env, ctx.lp);
+  CPXgetstatstring(ctx.env, solstat, statstring);
   string statstr(statstring);
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
   return endtime - inittime;
@@ -529,8 +529,8 @@ Grafo leerArchivoDeEntrada(const string &nombreDelArchivo) {
   return grafo;
 }
 
-void convertirVariablesLP(CPXENVptr env, CPXLPptr lp, char type) {
-  int cantidadDeVariables = CPXgetnumcols(env, lp);
+void convertirVariablesLP(lpcontext &ctx, char type) {
+  int cantidadDeVariables = CPXgetnumcols(ctx.env, ctx.lp);
   int *indices = new int[cantidadDeVariables];
   char *types = new char[cantidadDeVariables];
 
@@ -539,7 +539,7 @@ void convertirVariablesLP(CPXENVptr env, CPXLPptr lp, char type) {
     types[i] = type;
   }
 
-  int status = CPXchgctype(env, lp, cantidadDeVariables, indices, types);
+  int status = CPXchgctype(ctx.env, ctx.lp, cantidadDeVariables, indices, types);
 
   delete[] indices;
   delete[] types;
@@ -550,12 +550,12 @@ void convertirVariablesLP(CPXENVptr env, CPXLPptr lp, char type) {
   }
 }
 
-void relajarLP(CPXENVptr env, CPXLPptr lp) {
-  convertirVariablesLP(env, lp, CPX_CONTINUOUS);
+void relajarLP(lpcontext &ctx) {
+  convertirVariablesLP(ctx, CPX_CONTINUOUS);
 }
 
-void desRelajarLP(CPXENVptr env, CPXLPptr lp) {
-  convertirVariablesLP(env, lp, CPX_BINARY);
+void desRelajarLP(lpcontext &ctx) {
+  convertirVariablesLP(ctx, CPX_BINARY);
 }
 
 /**
@@ -563,13 +563,13 @@ void desRelajarLP(CPXENVptr env, CPXLPptr lp) {
 * posiciones de los valores.
 * Utilizo selection sort.
 */
-void ordenarDescendientemente(double *valores, int *indices, int cantidad) {
+void ordenarDescendentemente(vector<double>& valores, vector<int> &indices) {
   double valorMaximo;
   int indiceMaximo;
-  for (int i = 0; i < cantidad; i++) {
+  for (int i = 0; i < valores.size(); i++) {
     indiceMaximo = 0;
     valorMaximo = 0;
-    for (int j = 0; j < cantidad; j++) {
+    for (int j = 0; j < valores.size(); j++) {
       if (valores[j] > valorMaximo) {
         valorMaximo = valores[j];
         indiceMaximo = j;
@@ -584,7 +584,7 @@ void ordenarDescendientemente(double *valores, int *indices, int cantidad) {
 * Agrega una restriccion al lp por la suma de los nodos de color j menor o igual
 * al wj
 */
-void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos,
+void agregarDesigualdadALP(lpcontext &ctx, list<int> nodos,
                            int colorJ, int cantidadDeNodos, int coeficienteWj,
                            char *nombreDesigualdad) {
   // Estos valores indican:
@@ -620,21 +620,19 @@ void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos,
   matbeg[0] = 0; // ASI ESTABA EN EL EJEMPLO, NO ENTIENDO BIEN QUE ES
 
   int i = 0;
-  list<int>::iterator it;
-  for (it = nodos.begin(); it != nodos.end(); ++it) {
-    // El nodo i con el color j es sol[i*cantidadDeNodos + j]
-    matind[i] = (*it - 1) * cantidadDeNodos +
-                (colorJ - 1); // El menos 1 es porque los nodos arrancan de 1 y
-                              // las variables de 0
+  for (const auto n : nodos) {
+    // El nodo i con el color j es x_n_j
+    matind[i] = ctx.xind(n - 1, colorJ -1);
     matval[i] = 1;            // El valor de cada coeficiente de x es 1
-    i++;
+    i++;  
   }
+
   // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
-  matind[i] = cantidadDeNodos * cantidadDeNodos + (colorJ - 1);
+  matind[i] = ctx.wind(colorJ -  1);
   matval[i] = coeficienteWj; // El valor del coeficiente de wj
 
   // Esta rutina agrega la restriccion al lp.
-  int status = CPXaddrows(env, lp, columnasAAgregar, restriccionesAAgregar,
+  int status = CPXaddrows(ctx.env, ctx.lp, columnasAAgregar, restriccionesAAgregar,
                           coeficientesDistintosDe0, rhs, sense, matbeg, matind,
                           matval, NULL, rownames);
   if (status) {
@@ -656,18 +654,22 @@ void agregarDesigualdadALP(CPXENVptr env, CPXLPptr lp, list<int> nodos,
 * correspondiente al LP
 */
 int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(
-    CPXENVptr env, CPXLPptr lp, double *valorVariablePorColor, int *indices,
-    int colorJ, double valorWj, Grafo grafo, int numeroDeDesigualdadClique) {
-  int cantidadDeNodos = grafo.getCantidadDeNodos();
+    lpcontext &ctx, const vector<double>& valorVariablePorColor, 
+    const vector<int>& indices, int colorJ, double valorWj, Grafo grafo, 
+    int numeroDeDesigualdadClique) {
+
+  int cantidadDeNodos = ctx.nodos;
   int nodo;
   int indicePrimerNodoNoUsado = 0;
   int coeficienteWj = -1;
   list<int> clique;
+
   while (indicePrimerNodoNoUsado < cantidadDeNodos) {
     clique.clear();
 
     clique.push_back(indices[indicePrimerNodoNoUsado]);
-    double sumaDeLaClique = valorVariablePorColor[0];
+    
+    double sumaDeLaClique = valorVariablePorColor[indicePrimerNodoNoUsado];
     for (int i = indicePrimerNodoNoUsado + 1; i < cantidadDeNodos; i++) {
       nodo = indices[i];
       if (grafo.esAdyacenteATodos(clique, nodo)) {
@@ -679,15 +681,14 @@ int buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(
     if (sumaDeLaClique > valorWj) {
       // La desigualdad de esta clique viola a la solucion actual
       // Genero nueva restriccion
-      int longitudNombreDeDesigualdad =
-          2 + ceil(log10(numeroDeDesigualdadClique));
-      char *nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
-      sprintf(nombreDeLaDesigualdad, "k_%d", numeroDeDesigualdadClique);
-      agregarDesigualdadALP(env, lp, clique, colorJ, cantidadDeNodos,
+      char *nombreDeLaDesigualdad = NULL;
+      asprintf(&nombreDeLaDesigualdad, "k_%d", numeroDeDesigualdadClique);
+      agregarDesigualdadALP(ctx, clique, colorJ, cantidadDeNodos,
                             coeficienteWj, nombreDeLaDesigualdad);
+      free(nombreDeLaDesigualdad);
       numeroDeDesigualdadClique++;
     }
-
+    
     indicePrimerNodoNoUsado++;
   }
 
@@ -853,62 +854,75 @@ int buscarAgujeroImparQueVioleLaDesigualdadAgujeroImparYAgregarla(
     char *nombreDeLaDesigualdad = new char[longitudNombreDeDesigualdad];
     sprintf(nombreDeLaDesigualdad, "a_%d", numeroDeDesigualdadAgujeroImpar);
 
-    agregarDesigualdadALP(env, lp, agujeroImpar, colorJ, cantidadDeNodos,
-                          -coeficienteWj, nombreDeLaDesigualdad);
+    //agregarDesigualdadALP(env, lp, agujeroImpar, colorJ, cantidadDeNodos,
+    //                      -coeficienteWj, nombreDeLaDesigualdad);
     numeroDeDesigualdadAgujeroImpar++;
   }
   //}
   return numeroDeDesigualdadAgujeroImpar;
 }
 
-void agregarPlanosDeCorte(CPXENVptr env, CPXLPptr lp, Grafo grafo,
+/* 
+  agregarPlanosDeCorte busca desigualdades de ciertas familias:
+    - Agujero Impar
+    - Clique Maxima
+  y trata de agregar las restricciones violadas al LP para achicar
+  el espacio de busqueda.
+*/
+void agregarPlanosDeCorte(lpcontext& ctx, Grafo grafo,
                           int iteracionesPlanosDeCorte) {
-  int cantidadDeNodos = grafo.getCantidadDeNodos();
-  int cantidadDeVariables = CPXgetnumcols(env, lp);
-  double *solucion = new double[cantidadDeVariables];
-  double *valorVariablePorColor = new double[cantidadDeNodos];
-  int *indices = new int[cantidadDeNodos];
-  int numeroDeDesigualdadClique = 1;
-  int numeroDeDesigualdadAgujeroImpar = 1;
-  bool agregueClique, agregueAgujero;
-  double inittime, endtime;
 
+  int cantidadDeNodos = ctx.nodos;
+  int cantidadDeColores = ctx.colores;
+  int cantidadDeVariables = CPXgetnumcols(ctx.env, ctx.lp);
+  
+  // por cada iteracion busco todas las desigualdades que pueda encontrar.
   for (int i = 0; i < iteracionesPlanosDeCorte; i++) {
-    // Tomamos el tiempo de resolucion utilizando CPXgettime.
-    CPXgettime(env, &inittime);
 
-    resolverLP(env, lp);
-    CPXgetx(env, lp, solucion, 0, cantidadDeVariables - 1);
+    vector<double> solucion(cantidadDeVariables, 0.0);
+    
+    
+    int numeroDeDesigualdadClique = 1;
+    //int numeroDeDesigualdadAgujeroImpar = 1;
+    
+    double inittime, endtime;
+    CPXgettime(ctx.env, &inittime);
+    // resolvemos el LP Relajado.
+    resolverLP(ctx);
+    CPXgetx(ctx.env, ctx.lp, &solucion[0], 0, cantidadDeVariables - 1);
 
     // Para cada color busco desigualdades que violen la solucion obtenida
-    for (int j = 0; j < cantidadDeNodos; j++) {
+    for (int j = 0; j < cantidadDeColores; j++) {
       // Para cada color buscamos una clique maximal y agregamos la restriccion
-      // El nodo i con el color j es sol[i*cantidadDeNodos + j]
-      // El color j es sol[cantidadDeNodos*cantidadDeNodos + j]
+      // La suma de los nodos pintados con ese color tiene que ser que el wj
+      vector<double> valorVariablePorColor(cantidadDeNodos, 0.0);
+      vector<int> indices(cantidadDeNodos, 0);
+      
       for (int k = 0; k < cantidadDeNodos; k++) {
-        valorVariablePorColor[k] = solucion[k * cantidadDeNodos + j];
+        valorVariablePorColor[k] = solucion[ctx.xind(k, j)];
         indices[k] = k + 1;
       }
-      double valorWj = solucion[cantidadDeNodos * cantidadDeNodos + j];
+      
+      double valorWj = solucion[ctx.wind(j)];
       int colorJ = j + 1;
-      ordenarDescendientemente(valorVariablePorColor, indices, cantidadDeNodos);
+      
+      ordenarDescendentemente(valorVariablePorColor, indices);
       numeroDeDesigualdadClique =
           buscarCliqueMaximalQueVioleLaDesigualdadCliqueYAgregarla(
-              env, lp, valorVariablePorColor, indices, colorJ, valorWj, grafo,
+              ctx, valorVariablePorColor, indices, colorJ, valorWj, grafo,
               numeroDeDesigualdadClique);
+      /*
       numeroDeDesigualdadAgujeroImpar =
           buscarAgujeroImparQueVioleLaDesigualdadAgujeroImparYAgregarla(
-              env, lp, valorVariablePorColor, indices, colorJ, valorWj, grafo,
+              ctx.env, ctx.lp, valorVariablePorColor, indices, colorJ, valorWj, grafo,
               numeroDeDesigualdadAgujeroImpar);
+      */
     }
     // Tomamos el tiempo de resolucion utilizando CPXgettime.
-    CPXgettime(env, &endtime);
+    CPXgettime(ctx.env, &endtime);
     cout << "La iteracion " << i + 1
          << " de planos de corte duro: " << endtime - inittime << endl;
   }
-  delete[] valorVariablePorColor;
-  delete[] indices;
-  delete[] solucion;
 }
 
 int main(int argc, char **argv) {
@@ -972,18 +986,18 @@ int main(int argc, char **argv) {
   status = CPXgettime(env, &inittime);
 
   // Relajo el LP
-  relajarLP(env, lp);
+  relajarLP(ctx);
 
   // Agregamos los planos de corte
-  agregarPlanosDeCorte(env, lp, grafo, iteracionesPlanosDeCorte);
+  agregarPlanosDeCorte(ctx, grafo, iteracionesPlanosDeCorte);
 
   // Quito la relajacion
-  desRelajarLP(env, lp);
+  desRelajarLP(ctx);
 
   // Escribimos el LP
   CPXwriteprob(env, lp, "modelo.lp", NULL);
 
-  double tiempoDeCorridaRecorrerArbol = resolverLP(env, lp);
+  double tiempoDeCorridaRecorrerArbol = resolverLP(ctx);
 
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   status = CPXgettime(env, &endtime);
