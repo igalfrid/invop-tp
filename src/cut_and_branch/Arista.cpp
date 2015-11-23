@@ -5,11 +5,6 @@ Arista::Arista(int origen, int destino) {
   this->destino = destino;
 }
 
-int Arista::getOrigen() {
-  return this->origen;
-}
+int Arista::getOrigen() const { return origen; }
 
-int Arista::getDestino() {
-  return this->destino;
-}
-
+int Arista::getDestino() const { return destino; }

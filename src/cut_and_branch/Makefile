@@ -2,9 +2,9 @@ CPLEX_LIB       = /opt/ibm/ILOG/CPLEX_Studio126/cplex/lib/x86-64_linux/static_pi
 LP_LIBS         = $(CPLEX_LIB)
 INC_DIR		= -I/opt/ibm/ILOG/CPLEX_Studio126/cplex/include/ -I/opt/ibm/ILOG/CPLEX_Studio126/concert/include/
 
-CCC = g++
+CXX = g++
 
-CCFLAGS = -m64 -O2 -fPIC -fexceptions -DNDEBUG -DIL_STD
+CXXFLAGS = -m64 -O2 -fPIC -fexceptions -DNDEBUG -DIL_STD -std=c++11 -Wall -Wextra -Wno-unused-result
 
 LDFLAGS = $(LP_LIBS) -lc -lm
 
@@ -19,11 +19,14 @@ SOURCES = $(SRCPRI)
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(OBJECTS) 
-	$(CCC) -o $(OUTPUT) $(OBJECTS) $(CCFLAGS) $(LDFLAGS) -lpthread -lm -lnsl
+	$(CXX) -o $(OUTPUT) $(OBJECTS) $(CXXFLAGS) $(LDFLAGS) -lpthread -lm -lnsl
 
 #
 # produce the .o files from the .cc and .c files
 #
 
 %.o: %.cpp $(DEPS)
-	$(CCC) $(CCFLAGS) $(INC_DIR) -c $<
+	$(CXX) $(CXXFLAGS) $(INC_DIR) -c $<
+
+clean:
+	rm -f *.o
