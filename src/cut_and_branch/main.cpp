@@ -385,7 +385,7 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
   }
 }
 
-double resolverLPGenerico(lpcontext &ctx, bool relajado) {
+double resolverLP(lpcontext &ctx) {
   // Resolvemos usando CPLEX pero branch and bound
   double inittime, endtime;
   int status;
@@ -394,11 +394,7 @@ double resolverLPGenerico(lpcontext &ctx, bool relajado) {
   status = CPXgettime(ctx.env, &inittime);
 
   // Optimizamos el problema.
-  if (relajado) {
-    status = CPXlpopt(ctx.env, ctx.lp);
-  } else {
-    status = CPXmipopt(ctx.env, ctx.lp);
-  }
+  status = CPXmipopt(ctx.env, ctx.lp);
 
   if (status) {
     cerr << "Problema optimizando CPLEX, status: " << status << endl;
@@ -421,8 +417,6 @@ double resolverLPGenerico(lpcontext &ctx, bool relajado) {
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
   return endtime - inittime;
 }
-
-double resolverLP(lpcontext &ctx) { return resolverLPGenerico(ctx, false); }
 
 void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
                        double tiempoDeCorridaRecorrerArbol,
@@ -565,23 +559,9 @@ void convertirVariablesLP(lpcontext &ctx, char type) {
   }
 }
 
-void relajarLP(lpcontext &ctx) {
-  convertirVariablesLP(ctx, CPX_CONTINUOUS);
-  int status = CPXchgprobtype(ctx.env, ctx.lp, CPXPROB_LP);
-  if (status) {
-    cerr << "failed to change problem type. err: " << status << endl;
-    exit(1);
-  }
-}
+void relajarLP(lpcontext &ctx) { convertirVariablesLP(ctx, CPX_CONTINUOUS); }
 
-void desrelajarLP(lpcontext &ctx) {
-  int status = CPXchgprobtype(ctx.env, ctx.lp, CPXPROB_MILP);
-  if (status) {
-    cerr << "failed to change problem type. err: " << status << endl;
-    exit(1);
-  }
-  convertirVariablesLP(ctx, CPX_BINARY);
-}
+void desrelajarLP(lpcontext &ctx) { convertirVariablesLP(ctx, CPX_BINARY); }
 
 /**
 * Ordena los valores de forma descendiente y los indices los alinea a las
@@ -630,7 +610,6 @@ void agregarDesigualdadALP(lpcontext &ctx, set<int> nodos, int color,
     indices.push_back(ctx.xind(n, color));
     coefs.push_back(1.0);
   }
-  cerr << endl;
 
   cerr << "Esta desigualdad consiste en:" << endl;
   int vars = CPXgetnumcols(ctx.env, ctx.lp);
@@ -643,7 +622,7 @@ void agregarDesigualdadALP(lpcontext &ctx, set<int> nodos, int color,
   CPXgetcolname(ctx.env, ctx.lp, &nombres[0], store, espacio, &surplus, 0,
                 vars - 1);
 
-  for (int i = 0; i < indices.size(); i++) {
+  for (unsigned int i = 0; i < indices.size(); i++) {
     cerr << nombres[indices[i]] << " + ";
   }
 
@@ -700,6 +679,9 @@ void agregarCliquesQueViolenDesigualdad(lpcontext &ctx,
       }
     }
 
+    if (clique.size() < 4)
+      continue;
+
     bool estaRepetido = false;
     for (const auto &c : cliquesUsadas) {
       if (includes(c.begin(), c.end(), clique.begin(), clique.end())) {
@@ -713,8 +695,8 @@ void agregarCliquesQueViolenDesigualdad(lpcontext &ctx,
     if (sumaClique > valorWj) {
       char *desigualdad = NULL;
       asprintf(&desigualdad, "k_%d", numClique);
-      cerr << "Se agrega clique " << numClique << " color " << color;
-      cerr << " nodos " << clique.size() << " " << desigualdad;
+      // cerr << "Se agrega clique " << numClique << " color " << color;
+      // cerr << " nodos " << clique.size() << " " << desigualdad;
       agregarDesigualdadALP(ctx, clique, color, coeficienteWj, desigualdad);
       free(desigualdad);
       numClique += 1;
@@ -735,7 +717,7 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
   // resolvemos el LP Relajado.
   double inittime, endtime;
   CPXgettime(ctx.env, &inittime);
-  resolverLPGenerico(ctx, true);
+  resolverLP(ctx);
   CPXgettime(ctx.env, &endtime);
   cout << "ResolverLP Tardo: " << endtime - inittime << endl;
   CPXgetx(ctx.env, ctx.lp, &solucion[0], 0, vars - 1);
