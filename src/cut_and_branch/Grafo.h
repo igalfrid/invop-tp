@@ -2,29 +2,28 @@
 #define GRAFO_H
 #include "Arista.h"
 #include "Particion.h"
-#include <list>
+#include <set>
 
 class Grafo {
-    private:
-        int cantidadDeNodos;
-        list<Arista> aristas;
-        list<Particion> particiones;
+private:
+  int cantidadDeNodos;
+  list<Arista> aristas;
+  list<Particion> particiones;
 
-    public:
-        Grafo();
-        Grafo(int cantidadDeNodos);
-        void setCantidadDeNodos(int cantidad);
-        int getCantidadDeNodos();//{return this->cantidadDeNodos+6;}
-        int getCantidadDeAristas();//{return 0;}
-        int getCantidadDeParticiones();//{return 0;}
-        void agregarArista(int origen, int destino);
-        void agregarParticion(Particion particion);
-        bool sonAdyacentes(int p, int q);
-        list<Arista> getAristas();
-        list<Particion> getParticiones();
-        bool esAdyacenteATodos(list<int> nodos, int nodo);
-        bool estaContenidoEn(list<int> nodos, int nodo);
+public:
+  Grafo();
+  Grafo(int cantidadDeNodos);
+  void setCantidadDeNodos(int cantidad);
+  int getCantidadDeNodos() const;       //{return this->cantidadDeNodos+6;}
+  int getCantidadDeAristas() const;     //{return 0;}
+  int getCantidadDeParticiones() const; //{return 0;}
+  void agregarArista(int origen, int destino);
+  void agregarParticion(Particion particion);
+  bool sonAdyacentes(int p, int q) const;
+  list<Arista> getAristas() const;
+  list<Particion> getParticiones() const;
+  bool esAdyacenteATodos(const set<int> &nodos, int nodo) const;
+  bool estaContenidoEn(const set<int> &nodos, int nodo) const;
 };
-
 
 #endif

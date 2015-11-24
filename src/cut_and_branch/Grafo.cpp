@@ -11,11 +11,11 @@ void Grafo::setCantidadDeNodos(int cantidad) {
   this->cantidadDeNodos = cantidad;
 }
 
-int Grafo::getCantidadDeNodos() { return this->cantidadDeNodos; }
+int Grafo::getCantidadDeNodos() const { return cantidadDeNodos; }
 
-int Grafo::getCantidadDeAristas() { return this->aristas.size(); }
+int Grafo::getCantidadDeAristas() const { return aristas.size(); }
 
-int Grafo::getCantidadDeParticiones() { return this->particiones.size(); }
+int Grafo::getCantidadDeParticiones() const { return particiones.size(); }
 
 void Grafo::agregarArista(int origen, int destino) {
   // Las aristas deben pertenecer al grafo
@@ -33,11 +33,11 @@ void Grafo::agregarArista(int origen, int destino) {
   // Siempre el origen es menor que el destino
   if (origen > destino) {
     // Si el destino es menor que el origen llamo invirtiendo los parametros
-    this->agregarArista(destino, origen);
+    agregarArista(destino, origen);
     return;
   }
   // Aca puedo asegurar que el origen es menor que el destino
-  if (this->sonAdyacentes(origen, destino)) {
+  if (sonAdyacentes(origen, destino)) {
     // Si ya son adyacentes no vuelvo a agregar la arista
     return;
   }
@@ -49,43 +49,42 @@ void Grafo::agregarParticion(Particion particion) {
   particiones.push_back(particion);
 }
 
-bool Grafo::sonAdyacentes(int p, int q) {
+bool Grafo::sonAdyacentes(int p, int q) const {
   // El origen es menor que el destino
   if (p > q) {
     // Estan con el orden cambiados, los llamo con el orden correcto
-    return this->sonAdyacentes(q, p);
+    return sonAdyacentes(q, p);
   }
 
   // Aca puedo asegurar que estan con el orden correcto
-  list<Arista>::iterator it;
-  for (it = aristas.begin(); it != aristas.end(); ++it) {
-    if (it->getOrigen() == p && it->getDestino() == q) {
+  for (const auto &a : aristas) {
+    if (a.getOrigen() == p && a.getDestino() == q) {
       return true;
     }
   }
   return false;
 }
 
-list<Arista> Grafo::getAristas() { return this->aristas; }
+list<Arista> Grafo::getAristas() const { return aristas; }
 
-list<Particion> Grafo::getParticiones() { return this->particiones; }
+list<Particion> Grafo::getParticiones() const { return particiones; }
 
-bool Grafo::esAdyacenteATodos(list<int> nodos, int nodo) {
-  list<int>::iterator it;
-  for (it = nodos.begin(); it != nodos.end(); ++it) {
-    if (!this->sonAdyacentes(nodo, *it)) {
+bool Grafo::esAdyacenteATodos(const set<int> &nodos, int nodo) const {
+  for (const auto &n : nodos) {
+    if (not sonAdyacentes(nodo, n)) {
       return false;
     }
   }
+
   return true;
 }
 
-bool Grafo::estaContenidoEn(list<int> nodos, int nodo) {
-  list<int>::iterator it;
-  for (it = nodos.begin(); it != nodos.end(); ++it) {
-    if (*it == nodo) {
+bool Grafo::estaContenidoEn(const set<int> &nodos, int nodo) const {
+  for (const auto &n : nodos) {
+    if (n == nodo) {
       return true;
     }
   }
+
   return false;
 }
