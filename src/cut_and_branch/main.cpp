@@ -20,19 +20,20 @@ typedef struct t_ctx {
 
   int cliques;
   int agujeros;
+  int iteraciones;
 
   // xind devuelve el indice de la variable xnc (pintar el nodo n con el color
   // c). Ambos empiezan por 0
   inline int xind(int n, int c) {
     // la variable xij esta en la posicion (c * colores) + n
-    return nodos * c + n;
+    return nodos * (c - 1) + (n - 1);
   }
 
   // wind devuelve el indice de la variable wc (se usa el color c). Empieza por
   // 0.
   inline int wind(int c) {
     // la variable wj esta en la posicion (nodos * colores) + j
-    return nodos * colores + c;
+    return nodos * colores + (c - 1);
   }
 
 } lpcontext;
@@ -170,10 +171,10 @@ void agregarRestriccionesDeColor(lpcontext &ctx) {
       coefs[j * 2 + 1] = -1; // El valor del coeficiente de cada w es -1
 
       // primer variable: xji
-      indexes[j * 2] = ctx.xind(j, i);
+      indexes[j * 2] = ctx.xind(j + 1, i + 1);
 
       // segunda variable wi
-      indexes[j * 2 + 1] = ctx.wind(i);
+      indexes[j * 2 + 1] = ctx.wind(i + 1);
 
       asprintf(&rownames[j], "wp_%d_%d", j + 1, i + 1);
     }
@@ -227,7 +228,7 @@ void agregarRestriccionDeParticion(lpcontext &ctx, Particion particion,
   int nzcnt = 0;
   for (const auto &n : particion.getNodos()) {
     for (int c = 0; c < ctx.colores; c++) {
-      indexes[nzcnt] = ctx.xind(n - 1, c);
+      indexes[nzcnt] = ctx.xind(n, c + 1);
 
       nzcnt += 1;
     }
@@ -273,8 +274,8 @@ void agregarRestriccionDeColoreo(lpcontext &ctx, int origen, int destino) {
   for (int i = 0; i < rcnt; i++) {
     begin[i] = i * 2;
 
-    indexes[i * 2] = ctx.xind(origen - 1, i);
-    indexes[i * 2 + 1] = ctx.xind(destino - 1, i);
+    indexes[i * 2] = ctx.xind(origen, i + 1);
+    indexes[i * 2 + 1] = ctx.xind(destino, i + 1);
 
     asprintf(&rownames[i], "col_%d_%d_%d", origen, destino, i + 1);
   }
@@ -379,15 +380,15 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
     cerr << "Problema seteando el parametro CPX_PARAM_FRACCUTS en -1" << endl;
     exit(1);
   }
-  
+
   status = CPXsetintparam(env, CPX_PARAM_LANDPCUTS, -1);
-  
+
   status = CPXsetintparam(env, CPX_PARAM_ADVIND, 0);
   if (status) {
     cerr << "Problema seteando el parametro CPX_ADVINV en 0" << endl;
     exit(1);
   }
-  
+
   status = CPXsetintparam(env, CPX_PARAM_PRESLVND, -1);
   status = CPXsetintparam(env, CPX_PARAM_REPEATPRESOLVE, 0);
   status = CPXsetintparam(env, CPX_PARAM_RELAXPREIND, 0);
@@ -404,10 +405,8 @@ double resolverLPGenerico(lpcontext &ctx, bool esEntera) {
 
   // Optimizamos el problema.
   if (esEntera) {
-    cerr << "def" << endl;
     status = CPXmipopt(ctx.env, ctx.lp);
   } else {
-    cerr << "asd" << endl;
     status = CPXlpopt(ctx.env, ctx.lp);
   }
 
@@ -433,9 +432,7 @@ double resolverLPGenerico(lpcontext &ctx, bool esEntera) {
   return endtime - inittime;
 }
 
-double resolverLP(lpcontext &ctx) {
-  return resolverLPGenerico(ctx, true);
-}
+double resolverLP(lpcontext &ctx) { return resolverLPGenerico(ctx, true); }
 
 void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
                        double tiempoDeCorridaRecorrerArbol,
@@ -475,7 +472,6 @@ void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
   int sp;
   status = CPXgetcolname(env, lp, names, namestore, storespace, &sp, 0,
                          cantidadDeVariables - 1);
-
   if (status) {
     cerr << "Problema obteniendo la solucion del LP." << endl;
     exit(1);
@@ -611,7 +607,7 @@ void ordenarDescendentemente(vector<double> &valores, vector<int> &indices) {
 * la restriccion:
 * xa1_j + xa2_j + ... + xak_j + cj * wj <= 0.0
 */
-void agregarDesigualdadALP(lpcontext &ctx, set<int> nodos, int color,
+void agregarDesigualdadALP(lpcontext &ctx, const set<int> &nodos, int color,
                            int coefWj, char *nombreDesigualdad) {
   int ccnt = 0;
   int rcnt = 1;
@@ -628,28 +624,9 @@ void agregarDesigualdadALP(lpcontext &ctx, set<int> nodos, int color,
     coefs.push_back(1.0);
   }
 
-  cerr << "Esta desigualdad consiste en:" << endl;
-  int vars = CPXgetnumcols(ctx.env, ctx.lp);
-  int espacio = 20000;
-  int surplus = 0;
-  vector<char *> nombres(vars, NULL);
-
-  char *store = (char *)malloc(espacio);
-
-  CPXgetcolname(ctx.env, ctx.lp, &nombres[0], store, espacio, &surplus, 0,
-                vars - 1);
-
-  for (unsigned int i = 0; i < indices.size(); i++) {
-    cerr << nombres[indices[i]] << " + ";
-  }
-
   // ultima variable: coeficienteWj * wj
   indices.push_back(ctx.wind(color));
   coefs.push_back(coefWj);
-
-  cerr << coefs[coefs.size() - 1] << nombres[indices[indices.size() - 1]]
-       << endl;
-  free(store);
 
   int status =
       CPXaddrows(ctx.env, ctx.lp, ccnt, rcnt, nzcnt, &indep, &sentido, &begin,
@@ -657,6 +634,96 @@ void agregarDesigualdadALP(lpcontext &ctx, set<int> nodos, int color,
   if (status) {
     cerr << "Problema agregando restriccion por desigualdad clique" << endl;
     exit(1);
+  }
+}
+
+void agregarAgujerosImparesQueViolenDesigualdad(lpcontext &ctx,
+                                                const vector<double> &valores,
+                                                const vector<int> &indices,
+                                                int color, double valorWj,
+                                                const Grafo &grafo) {
+
+  list<int> agujero;
+  int sumaAgujero = 0;
+  vector<bool> nodosEnAgujero(ctx.nodos + 1, false);
+  // buscamos la primer arista, entre los nodos más pesados.
+  for (unsigned int i = 0; i < valores.size(); i++) {
+    for (unsigned int j = i + 1; j < valores.size(); j++) {
+      int origen = indices[i];
+      int destino = indices[j];
+      if (grafo.sonAdyacentes(origen, destino)) {
+        agujero.push_back(origen);
+        agujero.push_back(destino);
+        agujero.push_back(origen);
+
+        nodosEnAgujero[origen] = true;
+        nodosEnAgujero[destino] = true;
+
+        sumaAgujero += valores[i] + valores[j];
+        goto fin_loop;
+      }
+    }
+  }
+  // No hay aristas en todo el grafo.
+  if (agujero.empty()) {
+    return;
+  }
+
+fin_loop:
+  auto last = agujero.end();
+  --last;
+  auto it = agujero.begin();
+  int ultimoNodoAgregado = 0;
+  int valorUltimo = 0;
+  while (it != last) {
+    // trato de meter un nodo entre dos nodos consecutivos del agujero.
+    int nodo1 = *it;
+    int nodo2 = *(++it);
+
+    for (unsigned int i = 0; i < valores.size(); i++) {
+      int nodo = indices[i];
+
+      if (nodosEnAgujero[nodo])
+        continue;
+      if (not grafo.sonAdyacentes(nodo, nodo1))
+        continue;
+      if (not grafo.sonAdyacentes(nodo, nodo2))
+        continue;
+      // Aca sabemos que el nodo es adyacente a los dos y lo podemos meter.
+
+      agujero.insert(it, nodo);
+      nodosEnAgujero[nodo] = true;
+      sumaAgujero += valores[i];
+      --it;
+
+      ultimoNodoAgregado = nodo;
+      valorUltimo = valores[i];
+
+      --it;
+      break;
+    }
+  }
+
+  // sacamos el ultimo nodo que esta repetido
+  agujero.pop_back();
+  if (agujero.size() < 3) {
+    return;
+  }
+
+  // Tenemos un agujero par, sacamos el ultimo nodo agregado.
+  if (agujero.size() % 2 == 0) {
+    agujero.remove(ultimoNodoAgregado);
+    sumaAgujero -= valorUltimo;
+  }
+
+  int coeficienteWj = -(agujero.size() - 1) / 2;
+
+  if (sumaAgujero > coeficienteWj * valorWj) {
+    set<int> nodos(agujero.begin(), agujero.end());
+    char *desigualdad = NULL;
+    asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
+    agregarDesigualdadALP(ctx, nodos, color, coeficienteWj, desigualdad);
+    free(desigualdad);
   }
 }
 
@@ -690,15 +757,10 @@ void agregarCliquesQueViolenDesigualdad(lpcontext &ctx,
     double sumaClique = valores[i];
     for (int j = i + 1; j < nodos; j++) {
       int nodo = indices[j];
-      if (grafo.esAdyacenteATodos(clique, nodos)) {
+      if (grafo.esAdyacenteATodos(clique, nodo)) {
         clique.insert(nodo);
         sumaClique += valores[j];
       }
-    }
-
-    // solo agregamos cliques que usen al menos el 10% de los nodos
-    if (clique.size() < (unsigned int) ctx.nodos / 10) {
-      continue;
     }
 
     bool estaRepetido = false;
@@ -713,9 +775,7 @@ void agregarCliquesQueViolenDesigualdad(lpcontext &ctx,
 
     if (sumaClique > valorWj) {
       char *desigualdad = NULL;
-      asprintf(&desigualdad, "k_%d", numClique);
-      // cerr << "Se agrega clique " << numClique << " color " << color;
-      // cerr << " nodos " << clique.size() << " " << desigualdad;
+      asprintf(&desigualdad, "k_%d_%d", ctx.iteraciones, numClique);
       agregarDesigualdadALP(ctx, clique, color, coeficienteWj, desigualdad);
       free(desigualdad);
       numClique += 1;
@@ -736,13 +796,13 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
   // resolvemos el LP Relajado.
   double inittime, endtime;
   CPXgettime(ctx.env, &inittime);
-  resolverLPGenerico(ctx, true);
+  resolverLPGenerico(ctx, false);
   CPXgettime(ctx.env, &endtime);
   cout << "ResolverLP Tardo: " << endtime - inittime << endl;
   CPXgetx(ctx.env, ctx.lp, &solucion[0], 0, vars - 1);
   CPXgettime(ctx.env, &inittime);
   // Para cada color busco desigualdades que violen la solucion obtenida
-  for (int j = 0; j < colores; j++) {
+  for (int j = 1; j <= colores; j++) {
     // Para cada color buscamos una clique maximal y agregamos la restriccion
     // La suma de los nodos pintados con ese color tiene que ser que el wj
     vector<double> valores(nodos, 0.0); // xij
@@ -750,8 +810,8 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
     vector<int> indices(nodos, 0);
 
     for (int k = 0; k < nodos; k++) {
-      valores[k] = solucion[ctx.xind(k, j)];
-      indices[k] = k;
+      valores[k] = solucion[ctx.xind(k + 1, j)];
+      indices[k] = k + 1;
     }
 
     double valorWj = solucion[ctx.wind(j)];
@@ -761,6 +821,9 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
 
     agregarCliquesQueViolenDesigualdad(ctx, valores, indices, color, valorWj,
                                        grafo);
+
+    agregarAgujerosImparesQueViolenDesigualdad(ctx, valores, indices, color,
+                                               valorWj, grafo);
   }
   CPXgettime(ctx.env, &endtime);
   cout << "Agregar las restricciones tardo: " << endtime - inittime << endl;
@@ -780,6 +843,7 @@ void agregarPlanosDeCorte(lpcontext &ctx, Grafo grafo,
                           int iteracionesPlanosDeCorte) {
 
   for (int i = 0; i < iteracionesPlanosDeCorte; i++) {
+    ctx.iteraciones = i;
     double inittime, endtime;
     CPXgettime(ctx.env, &inittime);
     agregarPlanoDeCorte(ctx, grafo);
@@ -830,7 +894,7 @@ int main(int argc, char **argv) {
     cerr << "Problema abriendo el archivo log" << endl;
     exit(1);
   }
-  
+
   status = CPXsetlogfile(env, logfile);
   if (status) {
     cerr << "Problema seteando el archivo log" << endl;
@@ -850,7 +914,8 @@ int main(int argc, char **argv) {
     nodos : grafo.getCantidadDeNodos(),
     colores : grafo.getCantidadDeParticiones(),
     cliques : 0,
-    agujeros : 0
+    agujeros : 0,
+    iteraciones : 0
   };
 
   setearParametrosParaCplex(env);
@@ -862,7 +927,7 @@ int main(int argc, char **argv) {
 
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   status = CPXgettime(env, &inittime);
-  convertirVariablesLP(ctx, CPX_CONTINUOUS);
+  // convertirVariablesLP(ctx, CPX_CONTINUOUS);
   // Agregamos los planos de corte
   agregarPlanosDeCorte(ctx, grafo, iteracionesPlanosDeCorte);
   restringirLP(ctx);
