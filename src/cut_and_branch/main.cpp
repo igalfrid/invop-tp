@@ -53,7 +53,6 @@ void agregarVariablesParaNodos(lpcontext &ctx) {
   vector<double> objective(nodos, 0.0);
   vector<double> lowerbound(nodos, 0.0);
   vector<double> upperbound(nodos, 1.0);
-  vector<char> ctype(nodos, CPX_BINARY);
 
   // Para cada color, agregamos una variable por cada nodo, xn_c que dice que
   // el nodo n fue pintado del color c.
@@ -73,10 +72,9 @@ void agregarVariablesParaNodos(lpcontext &ctx) {
     double *obj = &objective[0];
     double *lb = &lowerbound[0];
     double *ub = &upperbound[0];
-    char *ct = &ctype[0];
     char **cnames = &colnames[0];
 
-    int status = CPXnewcols(ctx.env, ctx.lp, nodos, obj, lb, ub, ct, cnames);
+    int status = CPXnewcols(ctx.env, ctx.lp, nodos, obj, lb, ub, NULL, cnames);
     if (status) {
       cerr << "Problema agregando variables de coloreo de nodos" << endl;
       exit(1);
@@ -98,7 +96,6 @@ void agregarVariablesParaColores(lpcontext &ctx) {
   vector<double> objective(colores, 1.0);
   vector<double> lowerbound(colores, 0.0);
   vector<double> upperbound(colores, 1.0);
-  vector<char> ctype(colores, CPX_BINARY);
 
   vector<char *> colnames(colores, NULL);
 
@@ -116,10 +113,9 @@ void agregarVariablesParaColores(lpcontext &ctx) {
   double *obj = &objective[0];
   double *lb = &lowerbound[0];
   double *ub = &upperbound[0];
-  char *ct = &ctype[0];
   char **cnames = &colnames[0];
 
-  int status = CPXnewcols(ctx.env, ctx.lp, colores, obj, lb, ub, ct, cnames);
+  int status = CPXnewcols(ctx.env, ctx.lp, colores, obj, lb, ub, NULL, cnames);
   if (status) {
     cerr << "Problema agregando las variables por cada color de nodo" << endl;
     exit(1);
@@ -383,9 +379,22 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
     cerr << "Problema seteando el parametro CPX_PARAM_FRACCUTS en -1" << endl;
     exit(1);
   }
+  
+  status = CPXsetintparam(env, CPX_PARAM_LANDPCUTS, -1);
+  
+  status = CPXsetintparam(env, CPX_PARAM_ADVIND, 0);
+  if (status) {
+    cerr << "Problema seteando el parametro CPX_ADVINV en 0" << endl;
+    exit(1);
+  }
+  
+  status = CPXsetintparam(env, CPX_PARAM_PRESLVND, -1);
+  status = CPXsetintparam(env, CPX_PARAM_REPEATPRESOLVE, 0);
+  status = CPXsetintparam(env, CPX_PARAM_RELAXPREIND, 0);
+  status = CPXsetintparam(env, CPX_PARAM_REDUCE, 0);
 }
 
-double resolverLP(lpcontext &ctx) {
+double resolverLPGenerico(lpcontext &ctx, bool esEntera) {
   // Resolvemos usando CPLEX pero branch and bound
   double inittime, endtime;
   int status;
@@ -394,7 +403,13 @@ double resolverLP(lpcontext &ctx) {
   status = CPXgettime(ctx.env, &inittime);
 
   // Optimizamos el problema.
-  status = CPXmipopt(ctx.env, ctx.lp);
+  if (esEntera) {
+    cerr << "def" << endl;
+    status = CPXmipopt(ctx.env, ctx.lp);
+  } else {
+    cerr << "asd" << endl;
+    status = CPXlpopt(ctx.env, ctx.lp);
+  }
 
   if (status) {
     cerr << "Problema optimizando CPLEX, status: " << status << endl;
@@ -416,6 +431,10 @@ double resolverLP(lpcontext &ctx) {
   string statstr(statstring);
   cout << endl << "Resultado de la optimizacion: " << statstring << endl;
   return endtime - inittime;
+}
+
+double resolverLP(lpcontext &ctx) {
+  return resolverLPGenerico(ctx, true);
 }
 
 void generarResultados(CPXENVptr env, CPXLPptr lp, int cantidadDeNodos,
@@ -559,9 +578,7 @@ void convertirVariablesLP(lpcontext &ctx, char type) {
   }
 }
 
-void relajarLP(lpcontext &ctx) { convertirVariablesLP(ctx, CPX_CONTINUOUS); }
-
-void desrelajarLP(lpcontext &ctx) { convertirVariablesLP(ctx, CPX_BINARY); }
+void restringirLP(lpcontext &ctx) { convertirVariablesLP(ctx, CPX_BINARY); }
 
 /**
 * Ordena los valores de forma descendiente y los indices los alinea a las
@@ -679,8 +696,10 @@ void agregarCliquesQueViolenDesigualdad(lpcontext &ctx,
       }
     }
 
-    if (clique.size() < 4)
+    // solo agregamos cliques que usen al menos el 10% de los nodos
+    if (clique.size() < (unsigned int) ctx.nodos / 10) {
       continue;
+    }
 
     bool estaRepetido = false;
     for (const auto &c : cliquesUsadas) {
@@ -717,7 +736,7 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
   // resolvemos el LP Relajado.
   double inittime, endtime;
   CPXgettime(ctx.env, &inittime);
-  resolverLP(ctx);
+  resolverLPGenerico(ctx, true);
   CPXgettime(ctx.env, &endtime);
   cout << "ResolverLP Tardo: " << endtime - inittime << endl;
   CPXgetx(ctx.env, ctx.lp, &solucion[0], 0, vars - 1);
@@ -760,10 +779,6 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
 void agregarPlanosDeCorte(lpcontext &ctx, Grafo grafo,
                           int iteracionesPlanosDeCorte) {
 
-  if (iteracionesPlanosDeCorte == 0)
-    return;
-  relajarLP(ctx);
-
   for (int i = 0; i < iteracionesPlanosDeCorte; i++) {
     double inittime, endtime;
     CPXgettime(ctx.env, &inittime);
@@ -773,8 +788,6 @@ void agregarPlanosDeCorte(lpcontext &ctx, Grafo grafo,
     cout << "Iteracion " << i + 1 << " de planos de corte duro: ";
     cout << endtime - inittime << endl;
   }
-
-  desrelajarLP(ctx);
 }
 
 int main(int argc, char **argv) {
@@ -812,6 +825,17 @@ int main(int argc, char **argv) {
     cerr << "Error creando el entorno" << endl;
     exit(1);
   }
+  CPXFILEptr logfile = CPXfopen("/tmp/cplex.log", "a");
+  if (logfile == NULL) {
+    cerr << "Problema abriendo el archivo log" << endl;
+    exit(1);
+  }
+  
+  status = CPXsetlogfile(env, logfile);
+  if (status) {
+    cerr << "Problema seteando el archivo log" << endl;
+    exit(1);
+  }
 
   // Creo el LP.
   lp = CPXcreateprob(env, &status, instanceFilename.c_str());
@@ -838,9 +862,10 @@ int main(int argc, char **argv) {
 
   // Tomamos el tiempo de resolucion utilizando CPXgettime.
   status = CPXgettime(env, &inittime);
-
+  convertirVariablesLP(ctx, CPX_CONTINUOUS);
   // Agregamos los planos de corte
   agregarPlanosDeCorte(ctx, grafo, iteracionesPlanosDeCorte);
+  restringirLP(ctx);
 
   // Escribimos el LP
   CPXwriteprob(env, lp, "modelo.lp", NULL);
@@ -856,6 +881,12 @@ int main(int argc, char **argv) {
   generarResultados(env, lp, grafo.getCantidadDeNodos(),
                     tiempoDeCorridaRecorrerArbol, tiempoDeCorridaTotal,
                     outputFilename);
+
+  status = CPXfclose(logfile);
+  if (status) {
+    cerr << "Problema cerrando el archivo de logs" << endl;
+    exit(1);
+  }
 
   return 0;
 }
