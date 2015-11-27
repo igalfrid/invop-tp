@@ -3,12 +3,14 @@
 #include "Arista.h"
 #include "Particion.h"
 #include <set>
+#include <vector>
 
 class Grafo {
 private:
   int cantidadDeNodos;
   list<Arista> aristas;
   list<Particion> particiones;
+  vector<vector<bool>> adyacentes;
 
 public:
   Grafo();

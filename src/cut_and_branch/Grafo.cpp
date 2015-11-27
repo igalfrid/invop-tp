@@ -1,14 +1,22 @@
 #include "Grafo.h"
 #include <iostream>
+#include <vector>
 
 Grafo::Grafo() {
   // No hace nada
 }
 
-Grafo::Grafo(int cantidadDeNodos) { this->cantidadDeNodos = cantidadDeNodos; }
+Grafo::Grafo(int cantidadDeNodos) { setCantidadDeNodos(cantidadDeNodos); }
 
 void Grafo::setCantidadDeNodos(int cantidad) {
   this->cantidadDeNodos = cantidad;
+
+  adyacentes.clear();
+  // usamos los indices desde 1 hasta cantidad inclusive
+  for (int i = 0; i < cantidad + 1; i++) {
+    vector<bool> row(cantidad + 1, false);
+    adyacentes.push_back(row);
+  }
 }
 
 int Grafo::getCantidadDeNodos() const { return cantidadDeNodos; }
@@ -36,6 +44,7 @@ void Grafo::agregarArista(int origen, int destino) {
     agregarArista(destino, origen);
     return;
   }
+
   // Aca puedo asegurar que el origen es menor que el destino
   if (sonAdyacentes(origen, destino)) {
     // Si ya son adyacentes no vuelvo a agregar la arista
@@ -43,27 +52,16 @@ void Grafo::agregarArista(int origen, int destino) {
   }
   Arista arista = Arista(origen, destino);
   aristas.push_back(arista);
+
+  adyacentes[origen][destino] = true;
+  adyacentes[destino][origen] = true;
 }
 
 void Grafo::agregarParticion(Particion particion) {
   particiones.push_back(particion);
 }
 
-bool Grafo::sonAdyacentes(int p, int q) const {
-  // El origen es menor que el destino
-  if (p > q) {
-    // Estan con el orden cambiados, los llamo con el orden correcto
-    return sonAdyacentes(q, p);
-  }
-
-  // Aca puedo asegurar que estan con el orden correcto
-  for (const auto &a : aristas) {
-    if (a.getOrigen() == p && a.getDestino() == q) {
-      return true;
-    }
-  }
-  return false;
-}
+bool Grafo::sonAdyacentes(int p, int q) const { return adyacentes[p][q]; }
 
 list<Arista> Grafo::getAristas() const { return aristas; }
 
