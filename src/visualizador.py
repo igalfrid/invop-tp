@@ -47,10 +47,18 @@ def dibujarGrafo(inst, coloreo):
   lsnodos = []
   lsaristas = []
   
+  
   color = lambda n: nodosPintados[n] if n in nodosPintados else -1
-  i = 0
   cs = {"red": "#FF0000", "white":	"#FFFFFF", "cyan":	"#00FFFF", "silver": "#C0C0C0", "blue":	"#0000FF", 	"gray" :"#808080", "darkblue":	"#0000A0",	"black": "#000000", "lightblue":	"#ADD8E6",	"orange":	"#FFA500", "purple":	"#800080",	"brown": "#A52A2A", "yellow":	"#FFFF00",	"maroon": "#800000", "lime":	"#00FF00",	"green": "#008000", "magenta":	"#FF00FF",	"olive": "#808000"}
-  colores = [cs[x] for x in "lightblue red blue yellow orange green cyan brown darkblue white purple lime magenta".split(" ")]
+  css = [cs[x] for x in "lightblue red blue yellow orange green cyan brown darkblue white purple lime magenta".split(" ")]
+  
+  colores = {}
+  i = 0
+  for c in coloresUsados:
+    colores[c] = css[i]
+    i += 1
+  
+  i = 0
   shapes = "ellipse circle database box test image circularImage diamond dot star triangle triangleDown square icon".split(" ")
   for p in particiones:
     i += 1
