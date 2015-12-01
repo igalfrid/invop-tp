@@ -12,7 +12,7 @@ do
 				for j in $(seq 1 5)
 				do
 					# dejo fijo varSel en el default 0, y muevo nodeSel
-					for varSel in 0 1 2 3
+					for nodeSel in 0 1 2 3
 					do
 						./cut_and_branch/prog instancias/branching/instancia-$nodos-$densidad-$particiones.$i.$j.col instancias/branching/solved/instancia-$nodos-$densidad-$particiones.$i.$j.0.$nodeSel.col.solved 0 0 $nodeSel
 					done
