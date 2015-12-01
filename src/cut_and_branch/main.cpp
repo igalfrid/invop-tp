@@ -361,7 +361,6 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
       {CPX_PARAM_THREADS, 1},
       {CPX_PARAM_EACHCUTLIM, 0},
       {CPX_PARAM_FRACCUTS, -1},
-      {CPX_PARAM_ADVIND, 0},
       {CPX_PARAM_PRESLVND, -1},
       {CPX_PARAM_REPEATPRESOLVE, 0},
       {CPX_PARAM_RELAXPREIND, 0},
