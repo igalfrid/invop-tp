@@ -637,85 +637,95 @@ void agregarAgujerosImparesQueViolenDesigualdad(lpcontext &ctx,
   if (valores[0] == 0)
     return;
 
-  // Nos guardamos cual es el circuito impar mas grande que viola la desigualdad
-  set<int> masGrandeQueViola;
-  int coeficienteMasGrande = 0;
+  set<int> nodosUsados;
+  for (int i = 0; i < ctx.nodos; i++) {
+    // Nos guardamos cual es el circuito impar mas grande que viola la
+    // desigualdad
+    set<int> masGrandeQueViola;
+    int coeficienteMasGrande = 0;
 
-  list<int> agujero;
-  double sumaAgujero = 0;
-  vector<bool> nodosEnAgujero(ctx.nodos + 1, false);
-  // buscamos la primer arista, entre los nodos más pesados.
-  for (unsigned int i = 0; i < valores.size(); i++) {
-    for (unsigned int j = i + 1; j < valores.size(); j++) {
-      int origen = indices[i];
-      int destino = indices[j];
-      if (grafo.sonAdyacentes(origen, destino)) {
-        agujero.push_back(origen);
-        agujero.push_back(destino);
-        agujero.push_back(origen);
-
-        nodosEnAgujero[origen] = true;
-        nodosEnAgujero[destino] = true;
-
-        sumaAgujero += valores[i] + valores[j];
-        goto fin_loop;
-      }
-    }
-  }
-  // No hay aristas en todo el grafo.
-  if (agujero.empty()) {
-    return;
-  }
-
-fin_loop:
-  auto last = agujero.end();
-  --last;
-  auto it = agujero.begin();
-  while (it != last) {
-    // trato de meter un nodo entre dos nodos consecutivos del agujero.
-    int nodo1 = *it;
-    int nodo2 = *(++it);
-
+    list<int> agujero;
+    double sumaAgujero = 0;
+    vector<bool> nodosEnAgujero(ctx.nodos + 1, false);
+    // buscamos la primer arista, entre los nodos más pesados.
     for (unsigned int i = 0; i < valores.size(); i++) {
-      int nodo = indices[i];
+      for (unsigned int j = i + 1; j < valores.size(); j++) {
+        int origen = indices[i];
+        int destino = indices[j];
+        if (grafo.sonAdyacentes(origen, destino)) {
+          if (nodosUsados.find(origen) != nodosUsados.end() or
+              nodosUsados.find(destino) != nodosUsados.end()) {
+            continue;
+          }
 
-      if (nodosEnAgujero[nodo])
-        continue;
-      if (not grafo.sonAdyacentes(nodo, nodo1))
-        continue;
-      if (not grafo.sonAdyacentes(nodo, nodo2))
-        continue;
-      // Aca sabemos que el nodo es adyacente a los dos y lo podemos meter.
+          agujero.push_back(origen);
+          agujero.push_back(destino);
+          agujero.push_back(origen);
 
-      agujero.insert(it, nodo);
-      nodosEnAgujero[nodo] = true;
-      sumaAgujero += valores[i];
-      --it;
-      --it;
-      break;
-    }
-    // Si es impar y lo rompe, lo agregamos.
-    // pero aca tenemos un nodo de mas (a - b - a)
-    int ns = agujero.size() - 1;
-    if (ns % 2 == 1 and ns > 2) {
-      int coeficienteWj = (ns - 1) / 2;
+          nodosEnAgujero[origen] = true;
+          nodosEnAgujero[destino] = true;
 
-      if (sumaAgujero > coeficienteWj * valorWj) {
-        set<int> nodos(agujero.begin(), agujero.end());
-        masGrandeQueViola = nodos;
-        coeficienteMasGrande = coeficienteWj;
+          sumaAgujero += valores[i] + valores[j];
+          goto fin_loop;
+        }
       }
     }
+    // No hay aristas en todo el grafo.
+    if (agujero.empty()) {
+      return;
+    }
+
+  fin_loop:
+    auto last = agujero.end();
+    --last;
+    auto it = agujero.begin();
+    while (it != last) {
+      // trato de meter un nodo entre dos nodos consecutivos del agujero.
+      int nodo1 = *it;
+      int nodo2 = *(++it);
+
+      for (unsigned int i = 0; i < valores.size(); i++) {
+        int nodo = indices[i];
+
+        if (nodosEnAgujero[nodo])
+          continue;
+        if (not grafo.sonAdyacentes(nodo, nodo1))
+          continue;
+        if (not grafo.sonAdyacentes(nodo, nodo2))
+          continue;
+        // Aca sabemos que el nodo es adyacente a los dos y lo podemos meter.
+
+        agujero.insert(it, nodo);
+        nodosEnAgujero[nodo] = true;
+        sumaAgujero += valores[i];
+        --it;
+        --it;
+        break;
+      }
+      // Si es impar y lo rompe, lo agregamos.
+      // pero aca tenemos un nodo de mas (a - b - a)
+      int ns = agujero.size() - 1;
+      if (ns % 2 == 1 and ns > 2) {
+        int coeficienteWj = (ns - 1) / 2;
+
+        if (sumaAgujero > coeficienteWj * valorWj) {
+          set<int> nodos(agujero.begin(), agujero.end());
+          masGrandeQueViola = nodos;
+          coeficienteMasGrande = coeficienteWj;
+        }
+      }
+    }
+
+    if (masGrandeQueViola.empty())
+      return;
+
+    char *desigualdad = NULL;
+    asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
+    agregarDesigualdadALP(ctx, masGrandeQueViola, color, -coeficienteMasGrande,
+                          desigualdad);
+    free(desigualdad);
+    nodosUsados.insert(masGrandeQueViola.begin(), masGrandeQueViola.end());
   }
-
-  if (masGrandeQueViola.empty())
-    return;
-
-  char *desigualdad = NULL;
-  asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
-  agregarDesigualdadALP(ctx, masGrandeQueViola, color, -coeficienteMasGrande,
-                        desigualdad);
-  free(desigualdad);
 }
 
 /**
@@ -809,7 +819,6 @@ void agregarPlanoDeCorte(lpcontext &ctx, Grafo &grafo) {
     int color = j;
 
     ordenarDescendentemente(valores, indices);
-
     agregarCliquesQueViolenDesigualdad(ctx, valores, indices, color, valorWj,
                                        grafo);
 
