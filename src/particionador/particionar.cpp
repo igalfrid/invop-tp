@@ -59,7 +59,6 @@ int main(int argc, char **argv) {
   int cantidadDeParticiones = atoi(argv[3]);
   int cantidadDeNodos, cantidadDeAristas;
 
-  cout << "Nombre del archivo de entrada: " << nombreDelArchivoDeEntrada << endl;
   archivoDeEntrada.open(nombreDelArchivoDeEntrada);
   if(archivoDeEntrada.fail()) {
     cout << "No se pudo abrir el archivo: " << nombreDelArchivoDeEntrada << endl;
@@ -82,7 +81,6 @@ int main(int argc, char **argv) {
   // Genero las particiones
   vector<set<int>> particiones(cantidadDeNodos);
   generarParticiones(cantidadDeNodos, cantidadDeParticiones, particiones);
-  cout << "Genere las particiones" << endl;
 
   // Comienzo a escribir el archivo
   ofstream archivoDeSalida(nombreDelArchivoDeSalida);
