@@ -349,27 +349,26 @@ void setearParametrosParaCplex(CPXENVptr env) {
   }
 }
 
-void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env, int varSel, int nodeSel) {
+void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env, int varSel,
+                                                   int nodeSel) {
   // Para que haga Branch & Bound:
   struct param {
     int whichparam;
     CPXINT newvalue;
   };
 
-  struct param params[] = {
-      {CPX_PARAM_VARSEL, 0},
-      {CPX_PARAM_NODESEL, 0},
-      {CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL},
-      {CPX_PARAM_THREADS, 1},
-      {CPX_PARAM_EACHCUTLIM, 0},
-      {CPX_PARAM_FRACCUTS, -1},
-      {CPX_PARAM_PRESLVND, -1},
-      {CPX_PARAM_REPEATPRESOLVE, 0},
-      {CPX_PARAM_RELAXPREIND, 0},
-      {CPX_PARAM_REDUCE, 0},
-      {CPX_PARAM_LANDPCUTS, -1},
-      {CPX_PARAM_PRESLVND, -1}
-  };
+  struct param params[] = {{CPX_PARAM_VARSEL, 0},
+                           {CPX_PARAM_NODESEL, 0},
+                           {CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL},
+                           {CPX_PARAM_THREADS, 1},
+                           {CPX_PARAM_EACHCUTLIM, 0},
+                           {CPX_PARAM_FRACCUTS, -1},
+                           {CPX_PARAM_PRESLVND, -1},
+                           {CPX_PARAM_REPEATPRESOLVE, 0},
+                           {CPX_PARAM_RELAXPREIND, 0},
+                           {CPX_PARAM_REDUCE, 0},
+                           {CPX_PARAM_LANDPCUTS, -1},
+                           {CPX_PARAM_PRESLVND, -1}};
 
   params[0].newvalue = varSel;
   params[1].newvalue = nodeSel;
@@ -635,8 +634,12 @@ void agregarAgujerosImparesQueViolenDesigualdad(lpcontext &ctx,
                                                 const Grafo &grafo) {
 
   // Si el valor mas grande es 0 no tiene sentido
-  if(valores[0] == 0)
+  if (valores[0] == 0)
     return;
+
+  // Nos guardamos cual es el circuito impar mas grande que viola la desigualdad
+  set<int> masGrandeQueViola;
+  int coeficienteMasGrande = 0;
 
   list<int> agujero;
   double sumaAgujero = 0;
@@ -668,8 +671,6 @@ fin_loop:
   auto last = agujero.end();
   --last;
   auto it = agujero.begin();
-  int ultimoNodoAgregado = 0;
-  int valorUltimo = 0;
   while (it != last) {
     // trato de meter un nodo entre dos nodos consecutivos del agujero.
     int nodo1 = *it;
@@ -690,42 +691,31 @@ fin_loop:
       nodosEnAgujero[nodo] = true;
       sumaAgujero += valores[i];
       --it;
-
-      ultimoNodoAgregado = nodo;
-      valorUltimo = valores[i];
-
       --it;
       break;
     }
+    // Si es impar y lo rompe, lo agregamos.
+    // pero aca tenemos un nodo de mas (a - b - a)
+    int ns = agujero.size() - 1;
+    if (ns % 2 == 1 and ns > 2) {
+      int coeficienteWj = (ns - 1) / 2;
+
+      if (sumaAgujero > coeficienteWj * valorWj) {
+        set<int> nodos(agujero.begin(), agujero.end());
+        masGrandeQueViola = nodos;
+        coeficienteMasGrande = coeficienteWj;
+      }
+    }
   }
 
-  // sacamos el ultimo nodo que esta repetido
-  agujero.pop_back();
-  if (agujero.size() < 3) {
+  if (masGrandeQueViola.empty())
     return;
-  }
 
-  // Tenemos un agujero par, sacamos el ultimo nodo agregado.
-  if (agujero.size() % 2 == 0) {
-    agujero.remove(ultimoNodoAgregado);
-    sumaAgujero -= valorUltimo;
-  }
-
-  int coeficienteWj = (agujero.size() - 1) / 2;
-
-  cout << "suma de agujero " << sumaAgujero << endl;
-  cout << "nodos en agujero " << agujero.size() << endl;
-  cout << "coeficiente wj " << coeficienteWj << endl;
-  cout << "valor wj " << valorWj << endl;
-
-
-  if (sumaAgujero > coeficienteWj * valorWj) {
-    set<int> nodos(agujero.begin(), agujero.end());
-    char *desigualdad = NULL;
-    asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
-    agregarDesigualdadALP(ctx, nodos, color, -coeficienteWj, desigualdad);
-    free(desigualdad);
-  }
+  char *desigualdad = NULL;
+  asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
+  agregarDesigualdadALP(ctx, masGrandeQueViola, color, -coeficienteMasGrande,
+                        desigualdad);
+  free(desigualdad);
 }
 
 /**
@@ -857,8 +847,10 @@ void agregarPlanosDeCorte(lpcontext &ctx, Grafo grafo,
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    cerr << "Uso: " << argv[0]
-         << " <archivoInstancia> <archivoSalida> [cantPlanos] [varSel] [nodeSel]" << endl;
+    cerr
+        << "Uso: " << argv[0]
+        << " <archivoInstancia> <archivoSalida> [cantPlanos] [varSel] [nodeSel]"
+        << endl;
     cerr << "varSel: -1, 0, 1, 2, 3, 4" << endl;
     cerr << "nodeSel: 0, 1, 2, 3" << endl;
     exit(1);
