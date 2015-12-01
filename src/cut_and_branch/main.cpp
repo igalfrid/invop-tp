@@ -341,7 +341,7 @@ void setearParametrosParaCplex(CPXENVptr env) {
   }
   // Por ahora no va a ser necesario, pero mas adelante si. Setea el tiempo
   // limite de ejecucion.
-  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 5 * 60);
+  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 10 * 60);
 
   if (status) {
     cerr << "Problema seteando el tiempo limite" << endl;
