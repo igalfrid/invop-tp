@@ -341,7 +341,7 @@ void setearParametrosParaCplex(CPXENVptr env) {
   }
   // Por ahora no va a ser necesario, pero mas adelante si. Setea el tiempo
   // limite de ejecucion.
-  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 2 * 3600);
+  status = CPXsetdblparam(env, CPX_PARAM_TILIM, 5 * 60);
 
   if (status) {
     cerr << "Problema seteando el tiempo limite" << endl;
@@ -933,6 +933,7 @@ int main(int argc, char **argv) {
 
   setearParametrosParaCplex(env);
   setearParametrosDeCPLEXParaBranchAndBoundPuro(env, varSel, nodeSel);
+  cerr << "NodeSel: " << nodeSel << "\tVarSel: " << varSel << endl;
 
   // Ahora si generamos el LP a partir del grafo
   generarLP(ctx, grafo);
