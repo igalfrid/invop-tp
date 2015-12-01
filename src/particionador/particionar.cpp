@@ -1,32 +1,58 @@
-#include <ilcplex/ilocplex.h>
-#include <ilcplex/cplex.h>
-ILOSTLBEGIN
 #include <string>
 #include <vector>
 #include <list>
+#include <set>
+#include <algorithm>
+#include <random>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
-void generarParticiones(int cantidadDeNodos, int cantidadDeParticiones, list<int> * particiones) {
-  // Recorro los nodos y coloco a cada nodo en la particion que le corresponde
-  for(int i=1; i<=cantidadDeNodos; i++) {
-    int particion = rand() % cantidadDeParticiones;
-    particiones[particion].push_back(i);
+void generarParticiones(int cantidadDeNodos, int cantidadDeParticiones,
+                            vector<set<int>>& particiones) {
+
+  vector<int> nodosDisponibles;
+  // Agregamos todos los nodos.
+  for (int i = 1; i <= cantidadDeNodos; i++) {
+    nodosDisponibles.push_back(i);
+  }
+  random_shuffle(nodosDisponibles.begin(), nodosDisponibles.end());
+
+  random_device rd; // only used once to initialise (seed) engine
+  mt19937 rng(
+      rd()); // random-number engine used (Mersenne-Twister in this case)
+  uniform_int_distribution<int> uni(0, cantidadDeParticiones - 1);
+
+  for (int i = 0; i < cantidadDeParticiones; i++) {
+    particiones[i].insert(nodosDisponibles[i]);
+  }
+
+  for (int i = cantidadDeParticiones; i < cantidadDeNodos; i++) {
+    auto random_integer = uni(rng);
+    particiones[random_integer].insert(nodosDisponibles[i]);
   }
 }
 
-void escribirParticiones(ofstream &archivo, list<int> * particiones, int cantidadDeParticiones) {
-  for (int i=0; i<cantidadDeParticiones; i++) {
+void escribirParticiones(ofstream &archivo, vector<set<int>>& particiones, int cantidadDeParticiones) {
+  // Escribo las particiones en el archivo
+  for (int i = 0; i < cantidadDeParticiones; i++) {
     archivo << "v " << particiones[i].size();
-    list<int>::iterator it;
-    for (it=particiones[i].begin(); it!=particiones[i].end(); ++it) {
-      archivo << " " << *it;
+    for (const auto &n : particiones[i]) {
+      archivo << " " << n;
     }
+
     archivo << endl;
   }
 }
 
 int main(int argc, char **argv) {
+  if (argc < 4) {
+    cerr << "Uso: " << argv[0]
+         << " <inputfile> <outputfile> <particiones>"
+         << endl;
+  }
+
   ifstream archivoDeEntrada;
   char * nombreDelArchivoDeEntrada = argv[1];
   char * nombreDelArchivoDeSalida = argv[2];
@@ -53,11 +79,9 @@ int main(int argc, char **argv) {
     }
   }
 
-  // Ya tenemos la cantidad de nodos
-  // Generamos las particiones
-  list<int> particiones[cantidadDeParticiones];
+  // Genero las particiones
+  vector<set<int>> particiones(cantidadDeNodos);
   generarParticiones(cantidadDeNodos, cantidadDeParticiones, particiones);
-
   cout << "Genere las particiones" << endl;
 
   // Comienzo a escribir el archivo
