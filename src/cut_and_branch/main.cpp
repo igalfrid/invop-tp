@@ -349,50 +349,41 @@ void setearParametrosParaCplex(CPXENVptr env) {
   }
 }
 
-void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env) {
+void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env, int varSel, int nodeSel) {
   // Para que haga Branch & Bound:
+  struct param {
+    int whichparam;
+    CPXINT newvalue;
+  };
 
-  int status =
-      CPXsetintparam(env, CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL);
-  if (status) {
-    cerr << "Problema seteando el parametro CPX_PARAM_MIPSEARCH en "
-            "CPX_MIPSEARCH_TRADITIONAL"
-         << endl;
-    exit(1);
+  struct param params[] = {
+      {CPX_PARAM_VARSEL, 0},
+      {CPX_PARAM_NODESEL, 0},
+      {CPX_PARAM_MIPSEARCH, CPX_MIPSEARCH_TRADITIONAL},
+      {CPX_PARAM_THREADS, 1},
+      {CPX_PARAM_EACHCUTLIM, 0},
+      {CPX_PARAM_FRACCUTS, -1},
+      {CPX_PARAM_PRESLVND, -1},
+      {CPX_PARAM_REPEATPRESOLVE, 0},
+      {CPX_PARAM_RELAXPREIND, 0},
+      {CPX_PARAM_REDUCE, 0},
+      {CPX_PARAM_LANDPCUTS, -1},
+      {CPX_PARAM_PRESLVND, -1}
+  };
+  
+  params[0].newvalue = varSel;
+  params[1].newvalue = nodeSel;
+
+  for (unsigned int i = 0; i < (sizeof params) / (sizeof params[0]); i += 1) {
+    int status = CPXsetintparam(env, params[i].whichparam, params[i].newvalue);
+    if (status) {
+      cerr << "Problema seteando parametro '" << params[i].whichparam
+           << "' en ";
+      cerr << params[i].newvalue << endl;
+
+      exit(1);
+    }
   }
-
-  // Para facilitar la comparación evitamos paralelismo:
-  status = CPXsetintparam(env, CPX_PARAM_THREADS, 1);
-  if (status) {
-    cerr << "Problema seteando el parametro CPX_PARAM_THREADS en 1" << endl;
-    exit(1);
-  }
-
-  // Para que no se adicionen planos de corte:
-  status = CPXsetintparam(env, CPX_PARAM_EACHCUTLIM, 0);
-  if (status) {
-    cerr << "Problema seteando el parametro CPX_PARAM_EACHCUTLIM en 0" << endl;
-    exit(1);
-  }
-
-  status = CPXsetintparam(env, CPX_PARAM_FRACCUTS, -1);
-  if (status) {
-    cerr << "Problema seteando el parametro CPX_PARAM_FRACCUTS en -1" << endl;
-    exit(1);
-  }
-
-  status = CPXsetintparam(env, CPX_PARAM_LANDPCUTS, -1);
-
-  status = CPXsetintparam(env, CPX_PARAM_ADVIND, 0);
-  if (status) {
-    cerr << "Problema seteando el parametro CPX_ADVINV en 0" << endl;
-    exit(1);
-  }
-
-  status = CPXsetintparam(env, CPX_PARAM_PRESLVND, -1);
-  status = CPXsetintparam(env, CPX_PARAM_REPEATPRESOLVE, 0);
-  status = CPXsetintparam(env, CPX_PARAM_RELAXPREIND, 0);
-  status = CPXsetintparam(env, CPX_PARAM_REDUCE, 0);
 }
 
 double resolverLPGenerico(lpcontext &ctx, bool esEntera) {
@@ -857,7 +848,9 @@ void agregarPlanosDeCorte(lpcontext &ctx, Grafo grafo,
 int main(int argc, char **argv) {
   if (argc < 3) {
     cerr << "Uso: " << argv[0]
-         << " <archivoInstancia> <archivoSalida> [cantPlanos]" << endl;
+         << " <archivoInstancia> <archivoSalida> [cantPlanos] [varSel] [nodeSel]" << endl;
+    cerr << "varSel: -1, 0, 1, 2, 3, 4" << endl;
+    cerr << "nodeSel: 0, 1, 2, 3" << endl;
     exit(1);
   }
   // Leemos el archivo y obtenemos el grafo
@@ -867,6 +860,16 @@ int main(int argc, char **argv) {
   int iteracionesPlanosDeCorte = 3; // Por default hace 3 iteraciones
   if (argv[3] != NULL) {
     iteracionesPlanosDeCorte = atoi(argv[3]);
+  }
+  
+  int varSel = 0;
+  if (argv[4] != NULL) {
+    varSel = atoi(argv[4]);
+  }
+  
+  int nodeSel = 0;
+  if (argv[5] != NULL) {
+    nodeSel = atoi(argv[5]);
   }
 
   cout << "Se utilizan " << iteracionesPlanosDeCorte
@@ -919,7 +922,7 @@ int main(int argc, char **argv) {
   };
 
   setearParametrosParaCplex(env);
-  setearParametrosDeCPLEXParaBranchAndBoundPuro(env);
+  setearParametrosDeCPLEXParaBranchAndBoundPuro(env, varSel, nodeSel);
 
   // Ahora si generamos el LP a partir del grafo
   generarLP(ctx, grafo);
