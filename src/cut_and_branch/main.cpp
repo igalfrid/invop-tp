@@ -370,7 +370,7 @@ void setearParametrosDeCPLEXParaBranchAndBoundPuro(CPXENVptr env, int varSel, in
       {CPX_PARAM_LANDPCUTS, -1},
       {CPX_PARAM_PRESLVND, -1}
   };
-  
+
   params[0].newvalue = varSel;
   params[1].newvalue = nodeSel;
 
@@ -634,8 +634,12 @@ void agregarAgujerosImparesQueViolenDesigualdad(lpcontext &ctx,
                                                 int color, double valorWj,
                                                 const Grafo &grafo) {
 
+  // Si el valor mas grande es 0 no tiene sentido
+  if(valores[0] == 0)
+    return;
+
   list<int> agujero;
-  int sumaAgujero = 0;
+  double sumaAgujero = 0;
   vector<bool> nodosEnAgujero(ctx.nodos + 1, false);
   // buscamos la primer arista, entre los nodos más pesados.
   for (unsigned int i = 0; i < valores.size(); i++) {
@@ -707,13 +711,19 @@ fin_loop:
     sumaAgujero -= valorUltimo;
   }
 
-  int coeficienteWj = -(agujero.size() - 1) / 2;
+  int coeficienteWj = (agujero.size() - 1) / 2;
+
+  cout << "suma de agujero " << sumaAgujero << endl;
+  cout << "nodos en agujero " << agujero.size() << endl;
+  cout << "coeficiente wj " << coeficienteWj << endl;
+  cout << "valor wj " << valorWj << endl;
+
 
   if (sumaAgujero > coeficienteWj * valorWj) {
     set<int> nodos(agujero.begin(), agujero.end());
     char *desigualdad = NULL;
     asprintf(&desigualdad, "a_%d_%d", ctx.iteraciones, ++ctx.agujeros);
-    agregarDesigualdadALP(ctx, nodos, color, coeficienteWj, desigualdad);
+    agregarDesigualdadALP(ctx, nodos, color, -coeficienteWj, desigualdad);
     free(desigualdad);
   }
 }
@@ -861,12 +871,12 @@ int main(int argc, char **argv) {
   if (argv[3] != NULL) {
     iteracionesPlanosDeCorte = atoi(argv[3]);
   }
-  
+
   int varSel = 0;
   if (argv[4] != NULL) {
     varSel = atoi(argv[4]);
   }
-  
+
   int nodeSel = 0;
   if (argv[5] != NULL) {
     nodeSel = atoi(argv[5]);
