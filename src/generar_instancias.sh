@@ -8,12 +8,12 @@ do
 		do
 			for i in $(seq 1 5)
 			do
-				# Genero 10 instancias distintas
+				# Genero 5 instancias distintas
 				./generador/generador $nodos 0.$d instancias/instancia-$nodos-$d-$k.$i.col
 				
 				for j in $(seq 1 5)
 				do
- 					# Genero 10 particiones distintas para cada instancia
+ 					# Genero 5 particiones distintas para cada instancia
 					./particionador/particionar instancias/instancia-$nodos-$d-$k.$i.col instancias/instancia-$nodos-$d-$k.$i.$j.col $k
 				done
 			done
