@@ -1,7 +1,6 @@
 *.lp
 *~
 *.sol
-*.solved
 *.log
 *.o
 tp
